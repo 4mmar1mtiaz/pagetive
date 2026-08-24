@@ -1,0 +1,274 @@
+// Adaptive LP — data model
+//
+// One Postgres database holds everything: pages are authored here, served here,
+// tracked here, and analysed here. No other hosted service is required.
+//
+// JSON-shaped columns are TEXT rather than Prisma's Json type. That started as
+// a SQLite constraint and is kept deliberately: the app never queries inside
+// those blobs, TEXT moves between engines with no data migration, and there is
+// exactly one place that parses them (src/lib/json.ts). Widen a column to jsonb
+// the day something genuinely needs to filter on a field inside it.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// Postgres, reached through the pooler in production.
+//
+// `url` is what the app uses at runtime. `directUrl` is used by migrations,
+// which need a real session for advisory locks and transactional DDL that a
+// transaction pooler cannot provide. On Railway both can be the same value —
+// it hands out one connection string — but the field has to exist so the same
+// schema works on Supabase and Neon, where they genuinely differ.
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// One landing page. `blocks` is the canonical master content — the thing every
+/// variant overrides rather than replaces. Storing typed blocks instead of HTML
+/// is the load-bearing constraint of the whole product: HTML cannot be
+/// personalised block by block, JSON can.
+model Page {
+  id        String   @id @default(cuid())
+  ownerId   String   @default("local") /// Account.id. Every read is scoped by this.
+  slug      String   @unique /// public routing key: /p/{slug}. Never changes once live.
+  name      String
+  status    String   @default("draft") /// draft | live
+  goal      String   @default("") /// plain-English objective, fed back to the LLM on edits
+  blocks    String   @default("[]") /// Block[]
+  theme     String   @default("{}") /// ThemeTokens
+  settings  String   @default("{}") /// PageSettings — CRM webhook, notify email, calendar, redirect
+  source    String   @default("chat") /// chat | import
+  sourceUrl String? /// original URL when imported
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variants    Variant[]
+  events      Event[]
+  leads       Lead[]
+  assignments Assignment[]
+  versions    PageVersion[]
+  domains     Domain[]
+  owner       Account?      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([ownerId])
+}
+
+/// A strategic angle plus the block overrides that express it. The control
+/// variant has an empty override set and always exists, so the bandit always
+/// has a baseline to beat and a page with zero variants still renders.
+model Variant {
+  id          String   @id @default(cuid())
+  pageId      String
+  name        String
+  angle       String   @default("") /// "money-back guarantee", "speed", ...
+  match       String   @default("{}") /// MatchRule — url params that hard-route to this variant
+  overrides   String   @default("{}") /// Record<blockId, Partial<Block>>
+  isControl   Boolean  @default(false)
+  active      Boolean  @default(true)
+  impressions Int      @default(0)
+  conversions Int      @default(0)
+  createdAt   DateTime @default(now())
+  origin      String   @default("manual") /// manual | generated | optimizer
+
+  page   Page    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  events Event[]
+  leads  Lead[]
+
+  @@index([pageId, active])
+}
+
+/// Sticky visitor -> variant binding. Without this a returning visitor sees a
+/// different page on every load, which destroys both the experience and the
+/// attribution.
+model Assignment {
+  id        String   @id @default(cuid())
+  pageId    String
+  visitorId String
+  variantId String
+  createdAt DateTime @default(now())
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, visitorId])
+}
+
+/// Raw behavioural event. One row per interaction — this is what the heatmaps
+/// and the section report are built from.
+model Event {
+  id        String   @id @default(cuid())
+  pageId    String
+  variantId String?
+  visitorId String
+  sessionId String
+  type      String /// view | click | scroll | dwell | cta | form_start | conversion
+  blockId   String?
+  x         Float? /// 0-1, fraction of document width
+  y         Float? /// 0-1, fraction of full document height
+  value     Float? /// scroll percent, dwell ms — depends on type
+  meta      String   @default("{}")
+  createdAt DateTime @default(now())
+
+  page    Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  variant Variant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([pageId, type])
+  @@index([pageId, createdAt])
+}
+
+/// A captured form fill. Kept even when forwarding fails, so a broken CRM
+/// webhook loses nothing — `forwarded` and `forwardError` say what happened.
+model Lead {
+  id           String   @id @default(cuid())
+  pageId       String
+  variantId    String?
+  data         String   @default("{}")
+  forwarded    Boolean  @default(false)
+  forwardError String?
+  /// Came in over the rate limit. Stored so nothing is ever lost, but not
+  /// forwarded and not counted as a conversion until a human says otherwise.
+  suspect      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  page    Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  variant Variant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([pageId, createdAt])
+}
+
+/// Snapshot taken on every publish. This is the "wardrobe": the page can be
+/// rolled back to any past state, and each version carries the performance it
+/// earned while it was live.
+model PageVersion {
+  id        String   @id @default(cuid())
+  pageId    String
+  label     String
+  blocks    String
+  theme     String
+  createdAt DateTime @default(now())
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([pageId, createdAt])
+}
+
+/// Chat thread with the builder agent. Persisted so a page's whole build
+/// history is re-openable, the way a Claude conversation is.
+model Chat {
+  id        String   @id @default(cuid())
+  ownerId   String   @default("local")
+  title     String   @default("New page")
+  pageId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages Message[]
+  owner    Account?  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  chatId    String
+  role      String /// user | assistant
+  content   String /// JSON: Anthropic content blocks, or plain text for user turns
+  createdAt DateTime @default(now())
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId, createdAt])
+}
+
+/// Token spend, one row per model call.
+///
+/// Recorded because "what does a page cost to build" is a question the business
+/// model depends on, and estimating it after the fact from prompt sizes is
+/// guesswork. Every call through the chat loop and every generation tool writes
+/// one row here.
+model Usage {
+  id           String   @id @default(cuid())
+  accountId    String? /// who to bill it to; null on rows written before this existed
+  chatId       String?
+  pageId       String?
+  kind         String /// chat | variants | import
+  model        String
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  cacheRead    Int      @default(0)
+  cacheWrite   Int      @default(0)
+  costUsd      Float    @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([pageId])
+  @@index([accountId])
+  @@index([createdAt])
+}
+
+
+/// A hostname that serves one page directly at its root.
+///
+/// Two very different cases share this table, and the difference is only in
+/// what DNS the owner has to create:
+///
+///   - A subdomain of your own root (client.lp.yourdomain.com). One wildcard
+///     DNS record and one wildcard certificate cover every one of these
+///     forever, so adding the thousandth is a database insert and nothing else.
+///   - A customer's own hostname (offer.theircompany.com). They point a CNAME
+///     at you, and your host has to be told the hostname exists so it can issue
+///     a certificate for it. That second step is the only part that needs an
+///     account somewhere.
+///
+/// `verified` reflects DNS actually resolving to us, checked on demand. It is
+/// not a trust boundary — it exists so nobody spends an afternoon wondering why
+/// their domain 404s when the record was never created.
+model Domain {
+  id        String    @id @default(cuid())
+  hostname  String    @unique
+  pageId    String
+  verified  Boolean   @default(false)
+  lastCheck DateTime?
+  note      String?
+  createdAt DateTime  @default(now())
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([pageId])
+}
+
+
+/// One customer of this app.
+///
+/// Mirrors a Clerk user rather than storing credentials — Clerk owns identity,
+/// this row owns entitlement. Kept local so a plan check is a query the app
+/// already had to make, not a network call on every page load, and so the app
+/// still runs with no Clerk configured at all (one implicit local account).
+model Account {
+  id           String   @id @default(cuid())
+  clerkUserId  String?  @unique
+  email        String?
+  plan         String   @default("trial") /// trial | unlimited
+  pagesCreated Int      @default(0) /// lifetime, so deleting a page does not reset the trial
+  /// Per-account page limit, overriding the plan's. Null means use the plan.
+  /// Exists so one customer can be given room without inventing a new plan.
+  maxPages     Int?
+  /// Set from /admin. Blocks sign-in-gated work without deleting anything.
+  suspended    Boolean  @default(false)
+  /// The account's own Anthropic key. After FREE_MESSAGES turns on the shared
+  /// key, generation requires this — so running the service costs the operator
+  /// nothing per user. Stored as given; see src/lib/byok.ts on why.
+  apiKey       String?
+  /// Assistant turns spent against the operator's key. Not reset by anything
+  /// except an admin, because resetting it is the whole giveaway.
+  messagesUsed Int      @default(0)
+  note         String? /// free text for whoever is running the business
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  pages Page[]
+  chats Chat[]
+}
