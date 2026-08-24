@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { UserButton } from "@clerk/nextjs";
 import { Chat } from "@/components/Chat";
+import { KeyPanel } from "@/components/KeyPanel";
 import { Rail } from "@/components/Rail";
 import type { ChatRow, PageRow, PlanState, Turn } from "@/components/types";
 
@@ -27,6 +28,9 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [turnCost, setTurnCost] = useState<number | null>(null);
   const [plan, setPlan] = useState<PlanState | null>(null);
+  const [keyPrompt, setKeyPrompt] = useState<string | null>(null);
+  const [showKeyPanel, setShowKeyPanel] = useState(false);
+  const [freeLeft, setFreeLeft] = useState<number | null>(null);
 
   const loadPages = useCallback(async () => {
     const r = await fetch("/api/pages").then((x) => x.json());
@@ -121,6 +125,13 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
               case "chat":
                 setChatId(String(evt.chatId));
                 break;
+              case "needs_key":
+                // The free messages are spent. Not an error: the wall is the
+                // business model working as intended, so it gets the panel and
+                // an explanation rather than a red line in the transcript.
+                setKeyPrompt(String(evt.message));
+                setShowKeyPanel(true);
+                break;
               case "cost":
                 setTurnCost(Number(evt.usd));
                 break;
@@ -161,6 +172,7 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
                 patchLast((t) => ({ ...t, text: `${t.text}\n\n**${String(evt.message)}**` }));
                 break;
               case "done":
+                if (typeof evt.freeRemaining === "number") setFreeLeft(evt.freeRemaining);
                 if (touchedPage) {
                   loadPages();
                   setRefreshKey((k) => k + 1);
@@ -261,6 +273,13 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
                 : `${Math.min(plan.pagesCreated, plan.maxPages)}/${plan.maxPages} page${plan.maxPages === 1 ? "" : "s"} used · preview only`}
             </div>
           </div>
+          <button
+            className="btn sm ghost"
+            onClick={() => setShowKeyPanel((v) => !v)}
+            title="Anthropic API key"
+          >
+            {freeLeft !== null && freeLeft <= 3 ? `${freeLeft} left` : "Key"}
+          </button>
           {plan.isAdmin ? (
             <a className="btn sm ghost" href="/admin" title="Manage accounts">
               Accounts
@@ -271,6 +290,19 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
       </aside>
 
       <main className="col">
+        {showKeyPanel ? (
+          <div style={{ padding: "0 0 4px" }}>
+            <KeyPanel
+              message={keyPrompt ?? undefined}
+              onSaved={() => {
+                setShowKeyPanel(false);
+                setKeyPrompt(null);
+                setFreeLeft(null);
+              }}
+              onDismiss={() => setShowKeyPanel(false)}
+            />
+          </div>
+        ) : null}
         <Chat
           turns={turns}
           streaming={streaming}
