@@ -132,12 +132,17 @@ model Lead {
   /// Came in over the rate limit. Stored so nothing is ever lost, but not
   /// forwarded and not counted as a conversion until a human says otherwise.
   suspect      Boolean  @default(false)
+  /// Salted hash of the submitter's address. Never the address itself: this
+  /// exists only to count submissions per source, which a hash does equally
+  /// well, and a landing page has no business keeping visitor IPs.
+  ipHash       String?
   createdAt    DateTime @default(now())
 
   page    Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
   variant Variant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
 
   @@index([pageId, createdAt])
+  @@index([ipHash, createdAt])
 }
 
 /// Snapshot taken on every publish. This is the "wardrobe": the page can be

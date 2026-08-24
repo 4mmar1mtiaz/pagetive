@@ -16,12 +16,22 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
  * A pooler multiplexes these onto far fewer server connections, so a larger
  * client-side pool costs nothing upstream. Rather than depend on every
  * deployment being configured correctly, raise anything below the floor.
+ *
+ * Serverless inverts this completely. There, each concurrent invocation is its
+ * own process with its own pool, so a floor of ten means fifty concurrent
+ * requests try to hold five hundred connections and the database refuses them
+ * all. On a serverless host the correct client-side pool is small and the
+ * pooler does the multiplexing, so the floor is not applied at all.
  */
 const POOL_FLOOR = 10;
+
+/** Vercel and similar set this; a long-lived container does not. */
+const SERVERLESS = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
 function connectionUrl(): string | undefined {
   const raw = process.env.DATABASE_URL;
   if (!raw) return undefined;
+  if (SERVERLESS) return raw; // whatever the pooler URL says, it is right
   try {
     const url = new URL(raw);
     const current = Number(url.searchParams.get("connection_limit"));

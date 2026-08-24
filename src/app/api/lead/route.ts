@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { parseJson, toJson } from "@/lib/json";
 import type { PageSettings } from "@/lib/blocks";
 import { deliverLead } from "@/lib/notify";
-import { clientIp, rateLimit } from "@/lib/ratelimit";
+import { clientIp, countRecentByIp, hashIp, rateLimit } from "@/lib/ratelimit";
 
 /**
  * Form submission.
@@ -74,9 +74,14 @@ export async function POST(req: Request) {
   // Deliberately loose. This is a flood guard, not a quota: a script sending
   // thousands trips it long before a shared office or carrier address does.
   const ip = clientIp(req);
+  const ipHash = await hashIp(ip);
+
+  // Two checks. The in-memory one is free and catches a burst inside a single
+  // instance; the database one is the one that still works when the app is
+  // running in several places at once, which it is on any serverless host.
   const burst = rateLimit(`lead:${ip}`, 8, 60 * 1000);
-  const hourly = rateLimit(`lead-hour:${ip}`, 40, 60 * 60 * 1000);
-  const suspect = !burst.ok || !hourly.ok;
+  const recent = await countRecentByIp(ipHash, 60 * 60 * 1000);
+  const suspect = !burst.ok || recent >= 40;
 
   const page = await prisma.page.findUnique({ where: { id: pageId } });
   if (!page) return NextResponse.json({ error: "Unknown page" }, { status: 404 });
@@ -84,7 +89,7 @@ export async function POST(req: Request) {
   const variantId = body.variantId || null;
 
   const lead = await prisma.lead.create({
-    data: { pageId, variantId, data: toJson(data), suspect },
+    data: { pageId, variantId, data: toJson(data), suspect, ipHash },
   });
 
   // A flagged lead stops here: it is on the record and visible in the report,

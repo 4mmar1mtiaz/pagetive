@@ -2,14 +2,14 @@
  * A sliding-window limiter, in memory.
  *
  * In memory means per instance: two servers behind a load balancer each allow
- * the full budget, and a restart forgets everything. That is a real weakness
- * and it is still the right trade here — the job is to stop a script hammering
- * a public endpoint, not to enforce a quota to the request. Nothing depends on
- * the count being exact, and the alternative is a Redis dependency for one
- * feature on a product that currently needs no external services at all.
+ * the full budget, and a restart forgets everything. On a single long-lived
+ * server that is a fine trade, because the job is to stop a script hammering a
+ * public endpoint rather than to enforce a quota to the request.
  *
- * Swap the two functions for a shared store the day this runs on more than one
- * instance and the limits actually matter.
+ * On serverless it is close to useless, since an attacker's requests land on
+ * fresh instances. So this is now the cheap first line only, and the lead
+ * endpoint additionally counts prior submissions in the database, which is
+ * correct on any number of instances. See countRecentByIp below.
  */
 
 type Window = { hits: number[]; };
@@ -55,4 +55,31 @@ export function clientIp(req: Request): string {
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) return forwarded.split(",")[0].trim();
   return req.headers.get("x-real-ip") ?? req.headers.get("cf-connecting-ip") ?? "unknown";
+}
+
+
+/** Salted so the table never contains anything that reverses to an address. */
+export async function hashIp(ip: string): Promise<string> {
+  const salt = process.env.IP_HASH_SALT ?? "adaptive-lp";
+  const data = new TextEncoder().encode(`${salt}:${ip}`);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest))
+    .slice(0, 16)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * How many leads this source has submitted recently, counted in the database.
+ *
+ * The in-memory limiter above cannot see across instances, and on a serverless
+ * host every request may be a new instance. This costs one indexed count per
+ * submission and is the check that actually holds when the app is running in
+ * more than one place at once.
+ */
+export async function countRecentByIp(ipHash: string, withinMs: number): Promise<number> {
+  const { prisma } = await import("@/lib/db");
+  return prisma.lead.count({
+    where: { ipHash, createdAt: { gte: new Date(Date.now() - withinMs) } },
+  });
 }

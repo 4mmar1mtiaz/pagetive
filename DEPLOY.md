@@ -1,3 +1,8 @@
+# Deploying
+
+Two documented targets. **If you have Vercel Pro, use Vercel** — the difference
+is not close, and the reason is domains. See the comparison at the bottom.
+
 # Deploying to Railway
 
 The app is Postgres-backed and binds to `$PORT`, so Railway needs no special
@@ -164,3 +169,69 @@ nightly rollup table. `/api/health` shows the row count.
 **The first deploy runs migrations against an empty database.** That is normal;
 `prisma migrate deploy` creates every table. Your local Postgres data does not
 travel with the code.
+
+
+---
+
+# Deploying to Vercel
+
+Everything the app needs works on Vercel, and the domain allowance is the reason
+to prefer it. Three things differ from Railway.
+
+## 1. Postgres is not included
+
+Vercel does not host the database. Use Neon or Supabase, both of which have a
+free tier that suits this. Take the **pooled** connection string for
+`DATABASE_URL` and the **direct** one for `DIRECT_URL`. Getting these the wrong
+way round produces migrations that hang and no useful error.
+
+## 2. Function duration
+
+The chat route runs a multi-turn agent loop, and a page build with the editor
+pass takes 60 to 120 seconds. Vercel's limits with fluid compute:
+
+| Plan | Default | Maximum |
+|---|---|---|
+| Hobby | 300s | 300s |
+| Pro | 300s | 800s (1800s extended) |
+
+`src/app/api/chat/route.ts` already exports `maxDuration = 300`, which is inside
+the default on every plan. Raise it toward 800 only if you start seeing long
+builds cut off.
+
+## 3. Serverless changes two things in the code, and both are handled
+
+- **Connection pooling inverts.** On a long-lived server a bigger client pool is
+  better; on serverless each concurrent invocation is its own process with its
+  own pool, so a large floor exhausts the database. `src/lib/db.ts` detects
+  `VERCEL` and leaves the pooler URL exactly as given.
+- **In-memory rate limiting stops working**, because an attacker's requests land
+  on fresh instances. The lead endpoint therefore also counts prior submissions
+  in the database against a salted hash of the address, which is correct on any
+  number of instances. Set `IP_HASH_SALT` to anything private.
+
+## Domains: the actual reason to choose Vercel
+
+| | Railway Trial | Railway Hobby | **Vercel Pro** |
+|---|---|---|---|
+| Custom domains | 1 | 2 | **100,000 per project** |
+| Wildcard | yes, counts as 1 | yes | yes |
+| Customer-owned domains | not viable | not viable | **viable** |
+
+A wildcard on Vercel must use the **nameserver method**: Vercel has to control
+DNS for that domain in order to answer the challenge a wildcard certificate
+requires. Two ways to satisfy that without moving your main site's DNS:
+
+- Delegate only the subdomain. Add `lp.yourdomain.com` in Vercel and point NS
+  records for `lp` at the nameservers it gives you. Your root domain keeps the
+  DNS it has now.
+- Or move the whole domain's nameservers to Vercel, which is the path their
+  documentation describes directly.
+
+Confirm which one your setup allows in the dashboard before relying on it.
+
+With Pro, customer-owned hostnames also stop being a special case: 100,000
+domains means every client can point their own domain at you, and Vercel's
+Domains API can register each hostname programmatically as it is attached. The
+app already does the DNS half. Wiring the registration call is a small piece of
+work and needs a `VERCEL_API_TOKEN`.
