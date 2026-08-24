@@ -98,19 +98,55 @@ no first-admin bootstrapping problem, and promoting someone is a deploy rather
 than a button. For a role that can change everyone's billing, that is the right
 amount of friction. Nobody can promote themselves through the app.
 
-## 7. Custom domains for landing pages
+## 7. Subdomains, and what your Railway plan allows
 
-Two different things:
+Railway's custom-domain allowance is the binding constraint here, and it is per
+plan, not per project:
 
-- **Your own subdomains.** Set `WILDCARD_ROOT=lp.yourdomain.com` and point
-  `*.lp.yourdomain.com` at the Railway domain with one CNAME. Every subdomain
-  then works instantly with no further DNS. Check whether your Railway plan
-  supports a wildcard custom domain; if it does not, add each hostname in
-  Railway individually — the app handles either.
-- **A client's own domain.** They add the CNAME the app prints. You must also
-  add that hostname in Railway's Settings → Networking so a certificate is
-  issued for it. That is the one step the app cannot do for you without a
-  Railway API token.
+| Railway plan | Custom domains per service |
+|---|---|
+| Trial | **1** |
+| Hobby ($5/mo) | 2 (no increase available) |
+| Pro | 20, increasable on request |
+
+A **wildcard counts as one domain**, and Railway supports wildcards at any
+subdomain depth (`*.lp.yourdomain.com` is fine; `*.*.yourdomain.com` is not).
+A wildcard needs both the CNAME **and** the TXT record Railway shows, or it
+never verifies.
+
+That single fact decides your setup.
+
+### On the Trial plan: one wildcard, and it works
+
+You get one slot. Spend it on the wildcard, not on the app:
+
+- Run the app on the free `*.up.railway.app` hostname Railway gives you, or on
+  a Cloudflare-proxied host.
+- Point your one custom domain at `*.lp.yourdomain.com`.
+- Set `WILDCARD_ROOT="lp.yourdomain.com"`.
+
+Every published page then gets `its-slug.lp.yourdomain.com` **automatically, on
+publish, with no DNS work by anybody** — that is what `WILDCARD_ROOT` plus the
+auto-assignment in `publish_page` is for. One record, unlimited customer pages,
+zero marginal cost. This is the configuration a self-serve product on a free
+plan should run.
+
+A wildcard does **not** cover the bare domain, so `lp.yourdomain.com` itself is
+a separate entry. On Trial you cannot have both; on Hobby you can.
+
+### What does NOT work on a free plan
+
+A customer pointing **their own** domain at you (`offer.theircompany.com`)
+needs its own certificate, which means its own entry in Railway. One slot means
+one such customer, ever. The app builds the whole DNS side of this — it prints
+the exact CNAME and verifies it live — but the certificate is Railway's job and
+Railway is counting.
+
+If that becomes a real requirement, the answer is not a bigger Railway plan, it
+is **Cloudflare for SaaS** in front: customers CNAME to Cloudflare, Cloudflare
+issues per-hostname certificates, and Railway keeps seeing one origin. That is
+the product built for this exact problem. Until somebody actually asks for it,
+your own wildcard subdomains cover the self-serve case completely.
 
 ## Things that will bite
 

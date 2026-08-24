@@ -18,6 +18,7 @@ import { EXPLORE_MIN } from "@/lib/bandit";
 import { clearSimulation, simulateTraffic } from "@/lib/simulate";
 import { dnsPlan, verifyDomain } from "@/lib/domains";
 import { readBrand } from "@/lib/brand";
+import { wildcardRoot } from "@/lib/hosts";
 import { lintBlocks, reviewCopy } from "@/lib/copyreview";
 import { upgradeMessage, type Entitlements } from "@/lib/plan";
 
@@ -595,11 +596,42 @@ export async function runTool(
         }
         await prisma.page.update({ where: { id: pageId }, data: { status: live ? "live" : "draft" } });
         await ensureControl(pageId);
+
+        // Give every published page a hostname of its own, automatically.
+        //
+        // This is what makes the product self-serve on a single wildcard DNS
+        // record: the operator creates *.root once, and from then on every
+        // customer page gets its own subdomain with no DNS work by anybody and
+        // no per-hostname certificate. Without this, a self-serve user's only
+        // option is a shared /p/ path, which nobody wants to put in an ad.
+        const root = wildcardRoot();
+        let assignedHost: string | null = null;
+        if (live && root) {
+          const existing = await prisma.domain.findFirst({ where: { pageId } });
+          if (existing) {
+            assignedHost = existing.hostname;
+          } else {
+            const candidate = `${page.slug}.${root}`.toLowerCase();
+            const clash = await prisma.domain.findUnique({ where: { hostname: candidate } });
+            if (!clash) {
+              await prisma.domain.create({
+                data: { hostname: candidate, pageId, verified: true },
+              });
+              assignedHost = candidate;
+            }
+          }
+        }
+
         const base = process.env.APP_URL || "http://localhost:4400";
         return {
           pageId,
           status: live ? "live" : "draft",
-          url: live ? `${base}/p/${page.slug}` : null,
+          url: live ? (assignedHost ? `https://${assignedHost}` : `${base}/p/${page.slug}`) : null,
+          pathUrl: live ? `${base}/p/${page.slug}` : null,
+          subdomain: assignedHost,
+          note: assignedHost
+            ? `Live on its own subdomain immediately. The path URL keeps working too.`
+            : undefined,
         };
       }
 

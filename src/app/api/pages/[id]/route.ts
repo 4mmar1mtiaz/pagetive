@@ -5,6 +5,7 @@ import { upgradeMessage } from "@/lib/plan";
 import { parseJson, toJson } from "@/lib/json";
 import type { PageSettings } from "@/lib/blocks";
 import { ensureControl } from "@/lib/pages";
+import { wildcardRoot } from "@/lib/hosts";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,18 @@ export async function PATCH(req: Request, { params }: Ctx) {
     data.status = body.status;
     if (body.status === "live") {
       await ensureControl(id);
+      // Same automatic hostname as the chat path. See tools.ts publish_page.
+      const root = wildcardRoot();
+      if (root) {
+        const existing = await prisma.domain.findFirst({ where: { pageId: id } });
+        if (!existing) {
+          const candidate = `${page.slug}.${root}`.toLowerCase();
+          const clash = await prisma.domain.findUnique({ where: { hostname: candidate } });
+          if (!clash) {
+            await prisma.domain.create({ data: { hostname: candidate, pageId: id, verified: true } });
+          }
+        }
+      }
       await prisma.pageVersion.create({
         data: {
           pageId: id,
