@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { prisma } from "@/lib/db";
 import { parseJson } from "@/lib/json";
 import { composeBlocks, resolveForVisitor, type VariantRow } from "@/lib/compose";
@@ -44,8 +44,11 @@ export async function servePage(args: {
   const query = new URLSearchParams();
   for (const [k, v] of Object.entries(sp)) query.set(k, Array.isArray(v) ? (v[0] ?? "") : (v ?? ""));
 
+  // The cookie on a returning visit; on a first visit the proxy forwards the id
+  // it is about to set, so the first render is already the right person.
   const jar = await cookies();
-  const visitorId = jar.get("alp_vid")?.value ?? "anon";
+  const head = await headers();
+  const visitorId = jar.get("alp_vid")?.value ?? head.get("x-alp-vid") ?? "anon";
   const forcedId = typeof sp.v === "string" ? sp.v : null;
 
   const variants = page.variants as unknown as VariantRow[];

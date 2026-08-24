@@ -30,6 +30,9 @@ import { appHosts } from "@/lib/hosts";
 
 const COOKIE = "alp_vid";
 
+/** Carries a just-minted visitor id into the render that mints it. */
+export const FORWARD_HEADER = "x-alp-vid";
+
 const clerkConfigured = Boolean(
   process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY,
 );
@@ -73,10 +76,24 @@ function hostRewrite(request: NextRequest): URL | null {
 
 function base(request: NextRequest): { res: NextResponse; hosted: boolean } {
   const rewrite = hostRewrite(request);
-  const res = rewrite ? NextResponse.rewrite(rewrite) : NextResponse.next();
+  const existing = request.cookies.get(COOKIE)?.value;
+  const visitorId = existing ?? crypto.randomUUID().replace(/-/g, "");
 
-  if (!request.cookies.get(COOKIE)) {
-    res.cookies.set(COOKIE, crypto.randomUUID().replace(/-/g, ""), {
+  // A brand new visitor has no cookie on the request that renders their first
+  // page, so without this the first view is assigned a variant that is then
+  // thrown away: the cookie only arrives with the response, and their next
+  // request picks a different one. That first view is also the one credited
+  // with the traffic source, so getting it wrong scrambles attribution as well
+  // as flickering the offer. Forwarding the new id as a request header lets the
+  // very first render use the identity the response is about to hand out.
+  const headers = new Headers(request.headers);
+  if (!existing) headers.set(FORWARD_HEADER, visitorId);
+
+  const init = { request: { headers } };
+  const res = rewrite ? NextResponse.rewrite(rewrite, init) : NextResponse.next(init);
+
+  if (!existing) {
+    res.cookies.set(COOKIE, visitorId, {
       httpOnly: false, // the tracker reads it, so it cannot be httpOnly
       sameSite: "lax",
       maxAge: 60 * 60 * 24 * 365,
