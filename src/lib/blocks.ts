@@ -200,6 +200,13 @@ richtext  - headline, body   (body may use plain line breaks, no markup)
 media     - headline, subhead, mediaUrl, mediaKind ("image" or "video"), alt, caption
 footer    - body, links[{label, href}]
 
+LINKING TO THE APP. "/sign-up" and "/sign-in" are real routes. Use them as
+ctaHref whenever the action is "start using this product" rather than "send us
+your details" — a marketing page for the product itself wants sign-up, not a
+lead form. They are rewritten to the app's own domain at render time, so they
+keep working on a page served from a customer hostname. Write them exactly as
+"/sign-up" and "/sign-in"; do not build an absolute URL yourself.
+
 HARD RULES. These are not style preferences; a page that breaks one is wrong.
 
 1. NO EMOJI. Not in headlines, not in body copy, not as icons, not anywhere. The

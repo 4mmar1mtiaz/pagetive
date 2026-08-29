@@ -1,4 +1,5 @@
 import { LeadForm } from "@/components/lp/LeadForm";
+import { appUrl } from "@/lib/hosts";
 import { theme as resolveTheme, type Block, type PageSettings, type ThemeTokens } from "@/lib/blocks";
 
 /**
@@ -9,16 +10,37 @@ import { theme as resolveTheme, type Block, type PageSettings, type ThemeTokens 
  * tracker walks up from the clicked element to find it.
  */
 
+/** Routes that belong to the app itself rather than to the page being served. */
+const APP_ROUTES = ["/sign-in", "/sign-up", "/admin"];
+
+/**
+ * Point app links at the app, wherever this page is being served from.
+ *
+ * A published page can answer on its own hostname, and on that hostname a
+ * relative "/sign-in" is a page on the customer's domain, not the workspace —
+ * the proxy has no database at the edge, so it treats the unknown path as
+ * content and the button 404s. Rewriting these few paths to absolute URLs is
+ * what makes a marketing page on one domain able to send someone to an app on
+ * another. Every other href is left exactly as written.
+ */
+function resolveHref(href: string | undefined): string {
+  const target = href || "#form";
+  if (!APP_ROUTES.some((r) => target === r || target.startsWith(`${r}?`) || target.startsWith(`${r}/`))) {
+    return target;
+  }
+  return `${appUrl().replace(/\/+$/, "")}${target}`;
+}
+
 function Cta({ block }: { block: Block }) {
   if (!block.ctaText) return null;
   return (
     <>
       <div className="cta-row">
-        <a className="btn" href={block.ctaHref || "#form"} data-cta="primary">
+        <a className="btn" href={resolveHref(block.ctaHref)} data-cta="primary">
           {block.ctaText}
         </a>
         {block.secondaryCtaText ? (
-          <a className="btn ghost" href={block.secondaryCtaHref || "#form"} data-cta="secondary">
+          <a className="btn ghost" href={resolveHref(block.secondaryCtaHref)} data-cta="secondary">
             {block.secondaryCtaText}
           </a>
         ) : null}
@@ -222,7 +244,7 @@ function One({
                       <li key={j}>{f}</li>
                     ))}
                   </ul>
-                  <a className="btn" href={p.ctaHref || "#form"} data-cta="pricing">
+                  <a className="btn" href={resolveHref(p.ctaHref)} data-cta="pricing">
                     {p.ctaText || "Get started"}
                   </a>
                 </div>
@@ -336,7 +358,7 @@ function One({
             <span>{block.body}</span>
             <span>
               {(block.links ?? []).map((l, i) => (
-                <a key={i} href={l.href || "#"}>
+                <a key={i} href={l.href ? resolveHref(l.href) : "#"}>
                   {l.label}
                 </a>
               ))}
