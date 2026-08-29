@@ -46,6 +46,7 @@ export async function POST(req: Request) {
     chatId?: string;
     message?: string;
     pageId?: string | null;
+    assetIds?: string[];
   };
   const text = (body.message ?? "").trim();
   if (!text) return new Response("Nothing to say", { status: 400 });
@@ -92,6 +93,15 @@ export async function POST(req: Request) {
     chat.pageId = selectedPageId;
     await prisma.chat.update({ where: { id: chat.id }, data: { pageId: selectedPageId } });
   }
+
+  // Media attached to this turn. Scoped by owner for the same reason pages are:
+  // an id in a request body is a claim, not a permission.
+  const attached = Array.isArray(body.assetIds) && body.assetIds.length
+    ? await prisma.asset.findMany({
+        where: { id: { in: body.assetIds.slice(0, 20) }, ownerId: session.accountId },
+        orderBy: { createdAt: "asc" },
+      })
+    : [];
 
   // Only pages this account owns. A stale or forged id must not widen access.
   const selectedPage = chat.pageId
@@ -141,11 +151,24 @@ export async function POST(req: Request) {
           ? `\n\nThe user has "${selectedPage.name}" selected (pageId ${selectedPage.id}, slug ${selectedPage.slug}, ${selectedPage.status}). Every page tool this turn takes that pageId unless they name a different page outright. Do not call list_pages to work out which page they mean, and do not create a new page when they ask to change something — they are looking at this one.`
           : `\n\nNo page is selected. The user is starting something new, so build rather than edit: ask for their website and their offer in one message, call read_brand, then create_page. Do not go hunting through their existing pages.`;
 
+        // Attached media, given as URLs the blocks can use directly. The
+        // description is the user's own words about what each file is for, and
+        // it is the only thing that lets a file be placed correctly without
+        // asking them where it goes.
+        const mediaNote = attached.length
+          ? `\n\nThe user attached ${attached.length} file${attached.length === 1 ? "" : "s"} to this message. Use ${attached.length === 1 ? "it" : "them"} on the page — a hero image goes on the hero block as imageUrl, a logo row goes on logos items as imageUrl, and anything standing on its own goes in a media block with mediaUrl and mediaKind. Set alt from the description. Use these URLs exactly as written; do not invent, shorten or re-host them, and never use a stock photo URL instead.\n\n${attached
+              .map(
+                (a) =>
+                  `- ${a.kind} ${a.url}\n  filename: ${a.name}\n  what it is for: ${a.description || "(not said — place it where it fits and say where you put it)"}`,
+              )
+              .join("\n")}`
+          : "";
+
         for (let turn = 0; turn < MAX_TURNS; turn++) {
           const run = anthropic.messages.stream({
             model: MODEL,
             max_tokens: 32000,
-            system: systemPrompt(appUrl) + planNote + pageNote,
+            system: systemPrompt(appUrl) + planNote + pageNote + mediaNote,
             thinking: { type: "adaptive" },
             output_config: { effort: "high" },
             tools: TOOLS,

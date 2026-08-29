@@ -25,6 +25,7 @@ export type BlockType =
   | "calendar"
   | "cta"
   | "richtext"
+  | "media"
   | "footer";
 
 export type FormField = {
@@ -64,6 +65,8 @@ export type Block = {
     q?: string;
     a?: string;
     name?: string;
+    /** logo, screenshot or headshot for this item */
+    imageUrl?: string;
   }[];
   /** pricing */
   plans?: {
@@ -83,6 +86,14 @@ export type Block = {
   /** calendar — any embeddable scheduler URL (Cal.com, Calendly, TidyCal, ...) */
   embedUrl?: string;
   height?: number;
+  /** media — an uploaded image or video, and anywhere else one is shown */
+  mediaUrl?: string;
+  mediaKind?: "image" | "video";
+  /** Describes the image for screen readers and for search. Never decorative text. */
+  alt?: string;
+  caption?: string;
+  /** hero / cta / richtext: a single image beside or beneath the copy */
+  imageUrl?: string;
   /** footer */
   links?: { label?: string; href?: string }[];
 };
@@ -173,12 +184,12 @@ export function applyOverrides(blocks: Block[], overrides: Overrides): Block[] {
  */
 export const BLOCK_REFERENCE = `A page is a JSON array of blocks. Each block is an object with a "type" and the fields listed for that type. Omit fields you do not need. Never emit HTML.
 
-hero      - eyebrow, headline, subhead, ctaText, ctaHref, secondaryCtaText, secondaryCtaHref, ctaNote, align
-logos     - headline, items[{name}]
-features  - eyebrow, headline, subhead, items[{title, body}]
+hero      - eyebrow, headline, subhead, ctaText, ctaHref, secondaryCtaText, secondaryCtaHref, ctaNote, align, imageUrl, alt
+logos     - headline, items[{name, imageUrl}]
+features  - eyebrow, headline, subhead, items[{title, body, imageUrl}]
 steps     - headline, subhead, items[{title, body}]  (rendered numbered)
 stats     - headline, items[{value, label}]
-proof     - headline, items[{quote, author, role}]
+proof     - headline, items[{quote, author, role, imageUrl}]
 pricing   - headline, subhead, plans[{name, price, period, blurb, features[], ctaText, ctaHref, highlight}]
 faq       - headline, items[{q, a}]
 form      - headline, subhead, fields[{name, label, type, placeholder, required, options}], submitText, successMessage
@@ -186,6 +197,7 @@ form      - headline, subhead, fields[{name, label, type, placeholder, required,
 calendar  - headline, subhead, embedUrl, height   (embedUrl blank falls back to the page's default scheduler)
 cta       - headline, subhead, ctaText, ctaHref, ctaNote
 richtext  - headline, body   (body may use plain line breaks, no markup)
+media     - headline, subhead, mediaUrl, mediaKind ("image" or "video"), alt, caption
 footer    - body, links[{label, href}]
 
 HARD RULES. These are not style preferences; a page that breaks one is wrong.

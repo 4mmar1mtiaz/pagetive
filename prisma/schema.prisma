@@ -224,7 +224,6 @@ model Usage {
   @@index([createdAt])
 }
 
-
 /// A hostname that serves one page directly at its root.
 ///
 /// Two very different cases share this table, and the difference is only in
@@ -254,7 +253,6 @@ model Domain {
 
   @@index([pageId])
 }
-
 
 /// One customer of this app.
 ///
@@ -286,4 +284,32 @@ model Account {
 
   pages Page[]
   chats Chat[]
+}
+
+/// A file the user uploaded to use on their pages.
+///
+/// The bytes live in object storage, never in this table: a landing page hero
+/// video in a Postgres column makes every backup and every migration slower
+/// forever, for a file the browser is going to fetch from a CDN anyway. What is
+/// kept here is what the app has to query — who owns it, where it went, and the
+/// one thing storage cannot hold, which is what the user said it was for.
+///
+/// `description` is that sentence. It is written for the agent, not for the
+/// page: "the founder, use this on the about section" is what turns a URL into
+/// something that can be placed correctly without being asked.
+model Asset {
+  id          String   @id @default(cuid())
+  ownerId     String /// Account.id. Every read is scoped by this.
+  kind        String /// image | video
+  url         String /// public URL, what a block actually renders
+  path        String /// object path inside the bucket, needed to delete it
+  mime        String
+  bytes       Int      @default(0)
+  name        String   @default("")
+  /// What the user said this is for, in their words. Passed to the agent with
+  /// the turn it is attached to.
+  description String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@index([ownerId, createdAt])
 }

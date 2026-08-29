@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { renderMarkdown } from "@/lib/mini-md";
-import type { Turn } from "@/components/types";
+import type { AssetRow, Turn } from "@/components/types";
 
 /** Human-readable names for what the agent is doing. The raw tool name is
  *  accurate and reads like a log file; this reads like a colleague. */
@@ -51,6 +51,9 @@ export function Chat({
   chatTitle,
   onNewChat,
   cost,
+  attached,
+  onOpenMedia,
+  onDetach,
 }: {
   turns: Turn[];
   streaming: boolean;
@@ -63,6 +66,10 @@ export function Chat({
   /** What this turn has cost so far. Shown because a page build is a few tool
    *  calls of a frontier model, and nobody should have to guess at that. */
   cost: number | null;
+  /** Media riding along with the next message. */
+  attached: AssetRow[];
+  onOpenMedia: () => void;
+  onDetach: (id: string) => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLTextAreaElement>(null);
@@ -162,10 +169,40 @@ export function Chat({
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKeyDown}
             />
+            <button
+              className="btn ghost attach"
+              onClick={onOpenMedia}
+              disabled={streaming}
+              title="Add images or video"
+              aria-label="Add images or video"
+            >
+              {attached.length ? `${attached.length} file${attached.length === 1 ? "" : "s"}` : "Media"}
+            </button>
             <button className="btn primary" onClick={onSend} disabled={streaming || !input.trim()}>
               {streaming ? "Working…" : "Send"}
             </button>
           </div>
+          {attached.length ? (
+            <div className="attached-row">
+              {attached.map((a) => (
+                <button
+                  key={a.id}
+                  className="attached-chip"
+                  onClick={() => onDetach(a.id)}
+                  title={a.description || a.name}
+                >
+                  {a.kind === "video" ? (
+                    <video src={a.url} muted playsInline preload="metadata" />
+                  ) : (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img src={a.url} alt={a.description || a.name} />
+                  )}
+                  <span className="truncate">{a.description || a.name}</span>
+                  <span className="attached-x">×</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
           <div className="hint">Enter to send · Shift+Enter for a new line</div>
         </div>
       </div>

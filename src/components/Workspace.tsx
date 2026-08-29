@@ -4,8 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { UserButton } from "@clerk/nextjs";
 import { Chat } from "@/components/Chat";
 import { KeyPanel } from "@/components/KeyPanel";
+import { MediaDialog } from "@/components/MediaDialog";
 import { Rail } from "@/components/Rail";
-import type { ChatRow, PageRow, PlanState, Turn } from "@/components/types";
+import type { AssetRow, ChatRow, PageRow, PlanState, Turn } from "@/components/types";
 
 /**
  * The whole app is this screen: what you have on the left, the conversation in
@@ -31,6 +32,8 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
   const [keyPrompt, setKeyPrompt] = useState<string | null>(null);
   const [showKeyPanel, setShowKeyPanel] = useState(false);
   const [freeLeft, setFreeLeft] = useState<number | null>(null);
+  const [attached, setAttached] = useState<AssetRow[]>([]);
+  const [showMedia, setShowMedia] = useState(false);
 
   // Only the very first load picks a page. Every later refresh must leave the
   // selection alone: "New page" deliberately clears it, and re-selecting on the
@@ -124,6 +127,9 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
       if (!text || streaming) return;
 
       setInput("");
+      // Attachments belong to the message they were sent with, not to the
+      // thread. Leaving them on would silently re-send the same files next turn.
+      setAttached([]);
       setStreaming(true);
       setTurnCost(null);
       setTurns((t) => [...t, { role: "user", text, tools: [] }]);
@@ -144,7 +150,12 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ chatId, message: text, pageId: activePageId }),
+          body: JSON.stringify({
+            chatId,
+            message: text,
+            pageId: activePageId,
+            assetIds: attached.map((a) => a.id),
+          }),
         });
         if (!res.body) throw new Error("No response stream");
 
@@ -240,7 +251,7 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
         setRefreshKey((k) => k + 1);
       }
     },
-    [chatId, activePageId, input, streaming, loadChats, loadPages],
+    [chatId, activePageId, attached, input, streaming, loadChats, loadPages],
   );
 
   const activePage = pages.find((p) => p.id === activePageId) ?? null;
@@ -378,7 +389,18 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
           chatTitle={chatTitle}
           onNewChat={newChat}
           cost={turnCost}
+          attached={attached}
+          onOpenMedia={() => setShowMedia(true)}
+          onDetach={(id) => setAttached((all) => all.filter((a) => a.id !== id))}
         />
+
+        {showMedia ? (
+          <MediaDialog
+            alreadyAttached={attached.map((a) => a.id)}
+            onAttach={setAttached}
+            onClose={() => setShowMedia(false)}
+          />
+        ) : null}
       </main>
 
       <Rail

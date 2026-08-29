@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { hasApiKey } from "@/lib/llm";
 import { appUrl, wildcardRoot } from "@/lib/hosts";
+import { storageReady } from "@/lib/storage";
 
 /**
  * Why a deployment is broken, in one request.
@@ -53,6 +54,17 @@ export async function GET() {
       ? effectiveAppUrl
       : `${effectiveAppUrl} — from the platform; APP_URL itself is ${process.env.APP_URL}`,
   );
+  // Media is optional: pages work without it, they just cannot carry images or
+  // video. Reported as a check so a failed upload has an answer on this page
+  // rather than only in a browser console.
+  add(
+    "Media storage",
+    storageReady(),
+    storageReady()
+      ? "Supabase Storage configured"
+      : "not set — SUPABASE_URL and SUPABASE_SECRET_KEY are needed before images or video can be uploaded",
+  );
+
   const clerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY);
   add(
     "Clerk",

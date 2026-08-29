@@ -39,3 +39,14 @@ export type PlanState = {
   isAdmin: boolean;
   suspended: boolean;
 };
+
+/** An uploaded image or video, as the workspace sees it. */
+export type AssetRow = {
+  id: string;
+  kind: "image" | "video";
+  url: string;
+  name: string;
+  description: string;
+  bytes: number;
+  createdAt: string;
+};

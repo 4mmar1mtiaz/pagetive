@@ -67,6 +67,34 @@ function One({
             {block.headline ? <h1>{block.headline}</h1> : null}
             {block.subhead ? <p className="lead">{block.subhead}</p> : null}
             <Cta block={block} />
+            {block.imageUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img className="lp-media" src={block.imageUrl} alt={block.alt ?? ""} loading="eager" />
+            ) : null}
+          </div>
+        </section>
+      );
+
+    case "media":
+      return (
+        <section className={alt} {...attrs}>
+          <div className="wrap center">
+            <Heading block={block} />
+            {block.mediaUrl ? (
+              block.mediaKind === "video" ? (
+                <video
+                  className="lp-media"
+                  src={block.mediaUrl}
+                  controls
+                  playsInline
+                  preload="metadata"
+                />
+              ) : (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img className="lp-media" src={block.mediaUrl} alt={block.alt ?? ""} loading="lazy" />
+              )
+            ) : null}
+            {block.caption ? <p className="lp-caption">{block.caption}</p> : null}
           </div>
         </section>
       );
@@ -77,9 +105,14 @@ function One({
           <div className="wrap center">
             {block.headline ? <p>{block.headline}</p> : null}
             <div className="logos">
-              {(block.items ?? []).map((it, i) => (
-                <span key={i}>{it.name ?? it.title}</span>
-              ))}
+              {(block.items ?? []).map((it, i) =>
+                it.imageUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img key={i} className="lp-logo" src={it.imageUrl} alt={it.name ?? it.title ?? ""} loading="lazy" />
+                ) : (
+                  <span key={i}>{it.name ?? it.title}</span>
+                ),
+              )}
             </div>
           </div>
         </section>

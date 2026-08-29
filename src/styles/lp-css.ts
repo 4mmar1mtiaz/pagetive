@@ -201,6 +201,14 @@ export const LP_CSS = `/* Published landing page styling.
 
 .lp .logos { display: flex; flex-wrap: wrap; gap: 28px 44px; justify-content: center; align-items: center; opacity: .7; }
 .lp .logos span { font-size: 1.05rem; font-weight: 600; letter-spacing: .02em; }
+.lp .logos .lp-logo { height: 34px; width: auto; object-fit: contain; }
+
+/* Uploaded media. Height is capped rather than fixed so a portrait phone photo
+   and a 4K screenshot both sit inside the section instead of one of them
+   taking over the page. */
+.lp .lp-media { display: block; width: 100%; max-width: 900px; max-height: 70vh; height: auto; margin: 32px auto 0; border-radius: var(--radius); object-fit: contain; }
+.lp .hero .lp-media { margin-top: 44px; }
+.lp .lp-caption { margin-top: 12px; font-size: .95rem; opacity: .7; }
 
 @media (max-width: 640px) {
   .lp { --lp-pad: 56px; }
