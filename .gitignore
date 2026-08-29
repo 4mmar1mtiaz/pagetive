@@ -7,3 +7,5 @@ tsconfig.tsbuildinfo
 src/generated
 prisma/dev.db
 prisma/*.db-journal
+.env.backup
+.env.*.backup
