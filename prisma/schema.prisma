@@ -9,11 +9,18 @@
 // exactly one place that parses them (src/lib/json.ts). Widen a column to jsonb
 // the day something genuinely needs to filter on a field inside it.
 
+// Generated into node_modules/.prisma/client, the default location.
+//
+// A custom output directory does not survive serverless bundling: the client
+// gets inlined into a build chunk and then looks for the query engine relative
+// to that chunk rather than to its own folder, so the deployed function dies on
+// the first query with "could not locate the Query Engine". The default path is
+// the one every bundler already knows to carry, so it is the one this uses.
+//
+// binaryTargets names the Linux engine explicitly, because the machine that
+// builds is not the machine that runs and "native" alone only emits the former.
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
-  // The build machine is Linux, but the serverless runtime needs the engine
-  // named explicitly or the .so.node is never emitted for it.
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 

@@ -1,4 +1,4 @@
-import { PrismaClient } from "@/generated/prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 // Singleton so Next's dev hot-reload doesn't open a new pool per edit.
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };

@@ -5,12 +5,11 @@ const nextConfig: NextConfig = {
   // heatmap iframe on the same origin, so no frame headers are needed.
   images: { unoptimized: true },
 
-  // Prisma's client is generated to src/generated/prisma, which the serverless
-  // bundler does not trace on its own. Without this the query engine binary is
-  // left out of the deployed function and every request fails at runtime.
-  outputFileTracingIncludes: {
-    "/**": ["./src/generated/prisma/**"],
-  },
+  // Prisma ships a native query engine binary. Bundling the client inlines the
+  // JS and leaves the .node file behind, so the deployed function cannot find
+  // its engine. Keeping both packages external makes the bundler treat them as
+  // real files on disk and carry the binary along with them.
+  serverExternalPackages: ["@prisma/client", ".prisma/client"],
 };
 
 export default nextConfig;

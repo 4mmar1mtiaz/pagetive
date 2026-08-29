@@ -10,7 +10,7 @@
  * Run: npm run verify:isolation
  */
 import "dotenv/config";
-import { PrismaClient } from "../src/generated/prisma/client.ts";
+import { PrismaClient } from "@prisma/client";
 import { runTool } from "../src/lib/tools.ts";
 import { entitlements } from "../src/lib/plan.ts";
 
