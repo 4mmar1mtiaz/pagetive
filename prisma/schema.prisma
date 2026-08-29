@@ -12,6 +12,9 @@
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
+  // The build machine is Linux, but the serverless runtime needs the engine
+  // named explicitly or the .so.node is never emitted for it.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 // Postgres, reached through the pooler in production.
