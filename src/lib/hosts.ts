@@ -57,7 +57,22 @@ export function appUrl(): string {
   return configured || "http://localhost:4400";
 }
 
-/** Root you own and have pointed a wildcard at, e.g. "lp.yourdomain.com". */
+/**
+ * Root you own and have pointed a wildcard at, e.g. "lp.yourdomain.com".
+ *
+ * Written without the star. Everyone types the star anyway, because the DNS
+ * record they just created was "*.lp.yourdomain.com" and that is the string in
+ * front of them. Left unstripped it poisons everything downstream: the suffix
+ * test becomes endsWith(".*.lp.yourdomain.com") and never matches, the CNAME
+ * the customer is told to create points at a hostname with a star in it, and
+ * verification can only ever fail. Strip it here, once.
+ */
 export function wildcardRoot(): string | null {
-  return process.env.WILDCARD_ROOT?.trim().toLowerCase() || null;
+  const raw = process.env.WILDCARD_ROOT?.trim().toLowerCase();
+  if (!raw) return null;
+  const root = raw
+    .replace(/^\*+\.?/, "")
+    .replace(/^\.+/, "")
+    .replace(/\.+$/, "");
+  return root || null;
 }

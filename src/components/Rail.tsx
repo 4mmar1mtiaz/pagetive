@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PageAnalytics } from "@/lib/analytics";
 import type { PageRow, PlanState } from "@/components/types";
+import { Spinner } from "@/components/Spinner";
 
 /**
  * The right-hand rail: the page as it actually looks, the numbers it is
@@ -43,6 +44,13 @@ export function Rail({
   const [newHost, setNewHost] = useState("");
   const [domainError, setDomainError] = useState("");
   const [spend, setSpend] = useState<{ usd: number } | null>(null);
+  // One flag per in-flight action rather than a single shared one: verifying a
+  // domain must not grey out the button next to it, and the panel loading must
+  // not look like the publish button is working.
+  const [loadingPanel, setLoadingPanel] = useState(false);
+  const [addingDomain, setAddingDomain] = useState(false);
+  const [verifying, setVerifying] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
 
   const pageId = page?.id ?? null;
 
@@ -55,6 +63,11 @@ export function Rail({
   useEffect(() => {
     if (!pageId) return;
     let cancelled = false;
+    setLoadingPanel(true);
+    Promise.allSettled([
+      fetch(`/api/pages/${pageId}/analytics`),
+      fetch(`/api/pages/${pageId}/domains`),
+    ]).finally(() => !cancelled && setLoadingPanel(false));
     fetch(`/api/pages/${pageId}/analytics`)
       .then((r) => r.json())
       .then((d) => !cancelled && setStats(d.error ? null : d))
@@ -117,8 +130,10 @@ export function Rail({
   }
 
   async function addDomain() {
-    if (!page || !newHost.trim()) return;
+    if (!page || !newHost.trim() || addingDomain) return;
     setDomainError("");
+    setAddingDomain(true);
+    try {
     const res = await fetch(`/api/pages/${page.id}/domains`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -132,19 +147,42 @@ export function Rail({
     setNewHost("");
     const list = await fetch(`/api/pages/${page.id}/domains`).then((r) => r.json());
     setDomains(list.domains ?? []);
+    } finally {
+      setAddingDomain(false);
+    }
   }
 
+  /**
+   * A DNS lookup is the slowest thing in this panel and the one with nothing on
+   * screen while it runs, so it gets the clearest state: the button says what
+   * it is doing and cannot be pressed again underneath itself.
+   */
   async function verifyDomainRow(domainId: string) {
-    if (!page) return;
-    await fetch(`/api/domains/${domainId}/verify`, { method: "POST" });
-    const list = await fetch(`/api/pages/${page.id}/domains`).then((r) => r.json());
-    setDomains(list.domains ?? []);
+    if (!page || verifying) return;
+    setVerifying(domainId);
+    setDomainError("");
+    try {
+      const res = await fetch(`/api/domains/${domainId}/verify`, { method: "POST" });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) setDomainError(result.error ?? `Check failed (${res.status}).`);
+      const list = await fetch(`/api/pages/${page.id}/domains`).then((r) => r.json());
+      setDomains(list.domains ?? []);
+    } catch (err) {
+      setDomainError((err as Error).message);
+    } finally {
+      setVerifying(null);
+    }
   }
 
   async function removeDomain(domainId: string) {
-    if (!page) return;
-    await fetch(`/api/domains/${domainId}`, { method: "DELETE" });
-    setDomains((d) => d.filter((x) => x.id !== domainId));
+    if (!page || removing) return;
+    setRemoving(domainId);
+    try {
+      await fetch(`/api/domains/${domainId}`, { method: "DELETE" });
+      setDomains((d) => d.filter((x) => x.id !== domainId));
+    } finally {
+      setRemoving(null);
+    }
   }
 
   async function saveSettings() {
@@ -242,7 +280,13 @@ export function Rail({
               disabled={busy || (!canPublish && page.status !== "live")}
               title={canPublish ? undefined : "Publishing needs the unlimited plan"}
             >
-              {page.status === "live" ? "Unpublish" : "Publish"}
+              {busy ? (
+                <Spinner label={page.status === "live" ? "Unpublishing" : "Publishing"} />
+              ) : page.status === "live" ? (
+                "Unpublish"
+              ) : (
+                "Publish"
+              )}
             </button>
           </div>
           {blocked || (!canPublish && page.status !== "live") ? (
@@ -322,7 +366,7 @@ export function Rail({
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn sm" onClick={() => simulate(false)} disabled={simming} style={{ flex: 1 }}>
-              {simming ? "Running…" : "Simulate 600 visitors"}
+              {simming ? <Spinner label="Running" /> : "Simulate 600 visitors"}
             </button>
             <button className="btn sm ghost" onClick={() => simulate(true)} disabled={simming}>
               Clear
@@ -349,7 +393,7 @@ export function Rail({
           {field("redirectUrl", "After submit", "Leave blank to show the thank-you message")}
 
           <button className="btn primary" onClick={saveSettings} disabled={saving} style={{ width: "100%" }}>
-            {saving ? "Saving…" : "Save"}
+            {saving ? <Spinner label="Saving" /> : "Save"}
           </button>
 
           <div className="note" style={{ marginTop: 14 }}>
@@ -388,8 +432,8 @@ export function Rail({
                 outline: "none",
               }}
             />
-            <button className="btn sm" onClick={addDomain} disabled={!canDomain}>
-              Attach
+            <button className="btn sm" onClick={addDomain} disabled={!canDomain || addingDomain}>
+              {addingDomain ? <Spinner label="Attaching" /> : "Attach"}
             </button>
           </div>
           {domainError ? (
@@ -399,6 +443,7 @@ export function Rail({
           ) : null}
 
           <div className="rows">
+            {loadingPanel && domains.length === 0 ? <Spinner block label="Loading domains" /> : null}
             {domains.map((d) => (
               <div className="row-card" key={d.id}>
                 <div className="top">
@@ -419,12 +464,20 @@ export function Rail({
                 </div>
                 <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                   {!d.verified ? (
-                    <button className="btn sm ghost" onClick={() => verifyDomainRow(d.id)}>
-                      Check DNS
+                    <button
+                      className="btn sm ghost"
+                      onClick={() => verifyDomainRow(d.id)}
+                      disabled={verifying === d.id}
+                    >
+                      {verifying === d.id ? <Spinner label="Checking DNS" /> : "Check DNS"}
                     </button>
                   ) : null}
-                  <button className="btn sm ghost" onClick={() => removeDomain(d.id)}>
-                    Remove
+                  <button
+                    className="btn sm ghost"
+                    onClick={() => removeDomain(d.id)}
+                    disabled={removing === d.id}
+                  >
+                    {removing === d.id ? <Spinner label="Removing" /> : "Remove"}
                   </button>
                 </div>
               </div>

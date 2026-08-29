@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { Spinner } from "@/components/Spinner";
 
 /**
  * Date range, as one row above the charts.
@@ -25,6 +26,11 @@ export function RangePicker({ current, basePath }: { current: string; basePath: 
   const [custom, setCustom] = useState(current === "custom");
   const [from, setFrom] = useState(params.get("from") ?? "");
   const [to, setTo] = useState(params.get("to") ?? "");
+  // The range lives in the URL and the report is a server render, so changing
+  // it is a navigation. Without a pending state the old numbers sit there
+  // looking current for as long as the query takes, which is worse than slow:
+  // it is wrong data presented as right.
+  const [pending, startTransition] = useTransition();
 
   function go(next: Record<string, string | null>) {
     const q = new URLSearchParams(params.toString());
@@ -32,7 +38,7 @@ export function RangePicker({ current, basePath }: { current: string; basePath: 
       if (v === null) q.delete(k);
       else q.set(k, v);
     }
-    router.push(`${basePath}?${q.toString()}`);
+    startTransition(() => router.push(`${basePath}?${q.toString()}`));
   }
 
   return (
@@ -41,6 +47,7 @@ export function RangePicker({ current, basePath }: { current: string; basePath: 
         <button
           key={p.key}
           className={`tab ${current === p.key ? "active" : ""}`}
+          disabled={pending}
           onClick={() => {
             setCustom(false);
             go({ range: p.key, from: null, to: null });
@@ -72,13 +79,15 @@ export function RangePicker({ current, basePath }: { current: string; basePath: 
           />
           <button
             className="btn sm"
-            disabled={!from}
+            disabled={!from || pending}
             onClick={() => go({ range: "custom", from, to: to || "" })}
           >
-            Apply
+            {pending ? <Spinner label="Loading" /> : "Apply"}
           </button>
         </span>
       ) : null}
+
+      {pending ? <Spinner label="Updating the report" /> : null}
     </div>
   );
 }

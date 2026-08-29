@@ -9,6 +9,7 @@ import { Heatmap } from "@/components/Heatmap";
 import { Funnel } from "@/components/report/Funnel";
 import { TimeChart } from "@/components/report/TimeChart";
 import { RangePicker } from "@/components/report/RangePicker";
+import { Spinner } from "@/components/Spinner";
 
 export const dynamic = "force-dynamic";
 
@@ -101,7 +102,7 @@ export default async function PageDetail({ params, searchParams }: Props) {
           borderBottom: "1px solid var(--line)",
         }}
       >
-        <Suspense fallback={null}>
+        <Suspense fallback={<Spinner block label="Loading the heatmap" />}>
           <RangePicker current={report.range.key} basePath={basePath} />
         </Suspense>
         <span style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>

@@ -606,3 +606,41 @@ button { font: inherit; color: inherit; }
   font-size: 12.5px;
 }
 .media-desc:focus { outline: none; border-color: rgba(255, 255, 255, 0.3); }
+
+/* ---------------------------------------------------------------------------
+   Loading. One spinner, used everywhere something is in flight.
+   --------------------------------------------------------------------------- */
+
+.spin {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-top-color: rgba(255, 255, 255, 0.85);
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Respect a reader who has asked for less motion: keep the affordance, drop
+   the rotation. A pulsing ring still reads as "working". */
+@media (prefers-reduced-motion: reduce) {
+  .spin { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+}
+
+.spin-inline { display: inline-flex; align-items: center; gap: 7px; }
+.spin-block {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 14px 2px;
+  font-size: 12.5px;
+  color: var(--silver-faint);
+}
+
+/* A button showing a spinner is working, not unavailable. Keep it legible
+   rather than fading it out with the rest of the disabled states. */
+.btn:disabled:has(.spin) { opacity: 0.85; cursor: progress; }
+.tab:disabled { opacity: 0.5; cursor: progress; }

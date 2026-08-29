@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { renderMarkdown } from "@/lib/mini-md";
+import { Spinner } from "@/components/Spinner";
 import type { AssetRow, Turn } from "@/components/types";
 
 /** Human-readable names for what the agent is doing. The raw tool name is
@@ -54,6 +55,7 @@ export function Chat({
   attached,
   onOpenMedia,
   onDetach,
+  loadingThread,
 }: {
   turns: Turn[];
   streaming: boolean;
@@ -70,6 +72,9 @@ export function Chat({
   attached: AssetRow[];
   onOpenMedia: () => void;
   onDetach: (id: string) => void;
+  /** A stored thread is being fetched. Distinct from streaming: nothing is
+   *  being generated, the transcript simply is not here yet. */
+  loadingThread: boolean;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLTextAreaElement>(null);
@@ -92,7 +97,7 @@ export function Chat({
     }
   }
 
-  const empty = turns.length === 0;
+  const empty = turns.length === 0 && !loadingThread;
 
   return (
     <div className="glass col" style={{ height: "100%" }}>
@@ -110,6 +115,7 @@ export function Chat({
 
       <div className="thread">
         <div className="thread-inner">
+          {loadingThread ? <Spinner block label="Loading this conversation" /> : null}
           {empty ? (
             <div className="empty-hero fade-in">
               <h1 className="chrome">What are we launching?</h1>

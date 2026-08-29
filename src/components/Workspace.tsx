@@ -7,6 +7,7 @@ import { KeyPanel } from "@/components/KeyPanel";
 import { MediaDialog } from "@/components/MediaDialog";
 import { Rail } from "@/components/Rail";
 import type { AssetRow, ChatRow, PageRow, PlanState, Turn } from "@/components/types";
+import { Spinner } from "@/components/Spinner";
 
 /**
  * The whole app is this screen: what you have on the left, the conversation in
@@ -34,6 +35,11 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
   const [freeLeft, setFreeLeft] = useState<number | null>(null);
   const [attached, setAttached] = useState<AssetRow[]>([]);
   const [showMedia, setShowMedia] = useState(false);
+  // The rail is empty until the first fetch lands. On a cold load against a
+  // database in another region that is a second of blank sidebar, which reads
+  // as an account with nothing in it rather than as an account still loading.
+  const [loadingLists, setLoadingLists] = useState(true);
+  const [loadingThread, setLoadingThread] = useState(false);
 
   // Only the very first load picks a page. Every later refresh must leave the
   // selection alone: "New page" deliberately clears it, and re-selecting on the
@@ -56,21 +62,26 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
   }, []);
 
   useEffect(() => {
-    loadPages();
-    loadChats();
+    Promise.allSettled([loadPages(), loadChats()]).finally(() => setLoadingLists(false));
   }, [loadPages, loadChats]);
 
   async function openChat(id: string, title: string) {
     setChatId(id);
     setChatTitle(title);
-    const r = await fetch(`/api/chats/${id}`).then((x) => x.json());
-    setTurns(
-      (r.messages ?? []).map((m: { role: "user" | "assistant"; text: string; tools: string[] }) => ({
-        role: m.role,
-        text: m.text,
-        tools: (m.tools ?? []).map((name: string) => ({ name, state: "done" as const })),
-      })),
-    );
+    setTurns([]);
+    setLoadingThread(true);
+    try {
+      const r = await fetch(`/api/chats/${id}`).then((x) => x.json());
+      setTurns(
+        (r.messages ?? []).map((m: { role: "user" | "assistant"; text: string; tools: string[] }) => ({
+          role: m.role,
+          text: m.text,
+          tools: (m.tools ?? []).map((name: string) => ({ name, state: "done" as const })),
+        })),
+      );
+    } finally {
+      setLoadingThread(false);
+    }
   }
 
   /**
@@ -305,7 +316,12 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
               </div>
             </button>
           ))}
-          {pages.length === 0 ? (
+          {loadingLists && pages.length === 0 ? (
+            <div style={{ padding: "0 10px" }}>
+              <Spinner block label="Loading pages" />
+            </div>
+          ) : null}
+          {!loadingLists && pages.length === 0 ? (
             <div style={{ padding: "4px 10px", fontSize: 12, color: "var(--silver-faint)" }}>
               Nothing built yet.
             </div>
@@ -389,6 +405,7 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
           chatTitle={chatTitle}
           onNewChat={newChat}
           cost={turnCost}
+          loadingThread={loadingThread}
           attached={attached}
           onOpenMedia={() => setShowMedia(true)}
           onDetach={(id) => setAttached((all) => all.filter((a) => a.id !== id))}
