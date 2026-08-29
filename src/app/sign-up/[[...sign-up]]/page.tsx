@@ -12,7 +12,7 @@ export default function Page() {
 
   return (
     <AuthFrame heading={"Build your first page"} sub={"The free trial covers one complete landing page — built, restyled, variants written, traffic simulated, heatmap and all. Publishing and export need the unlimited plan."}>
-      <SignUp appearance={authAppearance} />
+      <SignUp appearance={authAppearance} signInUrl="/sign-in" />
     </AuthFrame>
   );
 }

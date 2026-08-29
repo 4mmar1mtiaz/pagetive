@@ -77,7 +77,27 @@ export function AuthFrame({
  * defaults — a single global light theme would have dragged that popover into
  * the wrong palette to fix a problem that only exists on these two screens.
  */
+/**
+ * How the Clerk widget is styled.
+ *
+ * One object, shared by both screens, so sign-in and sign-up cannot drift
+ * apart. `variables` are Clerk's own tokens and cover most of it; `elements`
+ * are per-part class overrides for the handful of things the tokens cannot
+ * reach, and `options` controls structure rather than colour.
+ *
+ * The card's own chrome is turned off on purpose. AuthFrame already draws a
+ * panel, and leaving Clerk's border and shadow on produced a card inside a
+ * card.
+ */
 export const authAppearance = {
+  options: {
+    // Clerk's own "Sign up" and "Sign in" links inside the widget follow the
+    // signUpUrl / signInUrl props on the components, not this object — without
+    // those props they point at the hosted portal on accounts.<domain>, which
+    // is a different design on a different subdomain.
+    socialButtonsVariant: "blockButton" as const,
+    socialButtonsPlacement: "top" as const,
+  },
   variables: {
     colorBackground: "transparent",
     colorPrimary: "#12161c",

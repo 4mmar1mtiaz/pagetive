@@ -12,7 +12,7 @@ export default function Page() {
 
   return (
     <AuthFrame heading={"Welcome back"} sub={"Your pages, variants and leads are where you left them."}>
-      <SignIn appearance={authAppearance} />
+      <SignIn appearance={authAppearance} signUpUrl="/sign-up" />
     </AuthFrame>
   );
 }
