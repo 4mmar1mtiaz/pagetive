@@ -90,6 +90,17 @@ export function AuthFrame({
  * panel, and leaving Clerk's border and shadow on produced a card inside a
  * card.
  */
+/**
+ * The auth panel's palette.
+ *
+ * Named here because the same three values are used a dozen times below and a
+ * near-black that drifts between elements is exactly what makes a form look
+ * unfinished.
+ */
+const INK = "#12161c";
+const MUTED = "#5b6470";
+const LINE = "rgba(0, 0, 0, 0.14)";
+
 export const authAppearance = {
   options: {
     // Clerk's own "Sign up" and "Sign in" links inside the widget follow the
@@ -99,26 +110,84 @@ export const authAppearance = {
     socialButtonsVariant: "blockButton" as const,
     socialButtonsPlacement: "top" as const,
   },
+
   variables: {
     colorBackground: "transparent",
-    colorPrimary: "#12161c",
-    colorText: "#0d1117",
-    colorTextSecondary: "#5b6470",
+    colorPrimary: INK,
+    colorText: INK,
+    colorTextSecondary: MUTED,
     colorInputBackground: "#ffffff",
-    colorInputText: "#0d1117",
-    colorNeutral: "#0d1117",
+    colorInputText: INK,
+    colorNeutral: INK,
+    colorDanger: "#b4232a",
+    colorSuccess: "#1c7c4a",
     borderRadius: "10px",
     fontSize: "14px",
+    fontFamily: "var(--font-sans), system-ui, sans-serif",
   },
+
+  // Style objects, not class names.
+  //
+  // These were Tailwind utility strings, and every one of them was silently
+  // losing. Tailwind v4 emits utilities inside a cascade layer, Clerk ships its
+  // own unlayered stylesheet, and unlayered CSS beats layered CSS whatever the
+  // specificity — so "text-white" on the primary button never applied and the
+  // label inherited the panel's near-black ink onto a near-black button. Style
+  // objects become inline styles, which nothing overrides.
   elements: {
-    rootBox: "w-full",
-    cardBox: "w-full shadow-none border-0",
-    card: "bg-transparent shadow-none border-0 p-0",
-    header: "hidden",
-    footer: "bg-transparent",
-    footerAction: "bg-transparent",
-    socialButtonsBlockButton: "border border-black/15 bg-white hover:bg-black/[0.03]",
-    formFieldInput: "border border-black/15 bg-white",
-    formButtonPrimary: "bg-[#12161c] text-white hover:bg-[#232a33] normal-case",
+    rootBox: { width: "100%" },
+    cardBox: { width: "100%", boxShadow: "none", border: "none" },
+    card: { background: "transparent", boxShadow: "none", border: "none", padding: 0 },
+    header: { display: "none" },
+
+    formButtonPrimary: {
+      background: INK,
+      color: "#ffffff",
+      border: "none",
+      boxShadow: "none",
+      textTransform: "none" as const,
+      fontSize: "14px",
+      fontWeight: 560,
+      letterSpacing: "0",
+      height: "40px",
+    },
+
+    socialButtonsBlockButton: {
+      background: "#ffffff",
+      color: INK,
+      border: `1px solid ${LINE}`,
+      boxShadow: "none",
+      height: "40px",
+      fontWeight: 520,
+      textTransform: "none" as const,
+    },
+    socialButtonsBlockButtonText: { color: INK, fontWeight: 520 },
+
+    dividerLine: { background: LINE },
+    dividerText: { color: MUTED },
+
+    formFieldLabel: { color: INK, fontWeight: 520 },
+    formFieldInput: {
+      background: "#ffffff",
+      color: INK,
+      border: `1px solid ${LINE}`,
+      boxShadow: "none",
+      height: "40px",
+    },
+    formFieldInputShowPasswordButton: { color: MUTED },
+    formFieldAction: { color: INK },
+    formFieldHintText: { color: MUTED },
+    formFieldErrorText: { color: "#b4232a" },
+    identityPreviewText: { color: INK },
+    identityPreviewEditButton: { color: INK },
+
+    footer: { background: "transparent" },
+    footerAction: { background: "transparent" },
+    footerActionText: { color: MUTED },
+    footerActionLink: { color: INK, fontWeight: 560, textDecoration: "underline" },
+
+    otpCodeFieldInput: { background: "#ffffff", color: INK, border: `1px solid ${LINE}` },
+    alertText: { color: INK },
+    formResendCodeLink: { color: INK },
   },
 };
