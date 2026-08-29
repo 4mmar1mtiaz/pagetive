@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { hasApiKey } from "@/lib/llm";
-import { wildcardRoot } from "@/lib/hosts";
+import { appUrl, wildcardRoot } from "@/lib/hosts";
 
 /**
  * Why a deployment is broken, in one request.
@@ -42,10 +42,16 @@ export async function GET() {
       : "NOT SET — the schema declares directUrl and the client will not start without it, even though only migrations use it",
   );
   add("ANTHROPIC_API_KEY", hasApiKey(), hasApiKey() ? "present" : "missing — the chat cannot run");
+  // The effective value, not the raw variable: on a platform that publishes its
+  // own hostname a localhost APP_URL is overridden rather than obeyed, and a
+  // check that reported the variable would call a working deployment broken.
+  const effectiveAppUrl = appUrl();
   add(
     "APP_URL",
-    Boolean(process.env.APP_URL && !process.env.APP_URL.includes("localhost")),
-    process.env.APP_URL || "not set — export links and published URLs will point at localhost",
+    !effectiveAppUrl.includes("localhost"),
+    process.env.APP_URL === effectiveAppUrl || !process.env.APP_URL
+      ? effectiveAppUrl
+      : `${effectiveAppUrl} — from the platform; APP_URL itself is ${process.env.APP_URL}`,
   );
   const clerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY);
   add(

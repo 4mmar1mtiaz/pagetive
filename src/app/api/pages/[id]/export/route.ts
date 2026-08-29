@@ -4,6 +4,7 @@ import { LP_CSS } from "@/styles/lp-css";
 import { normalizeBlocks, type Block, type PageSettings } from "@/lib/blocks";
 import { currentSession } from "@/lib/account";
 import { upgradeMessage } from "@/lib/plan";
+import { appUrl as resolvedAppUrl } from "@/lib/hosts";
 
 /**
  * Download a page as one self-contained HTML file.
@@ -49,7 +50,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const settings = parseJson<PageSettings>(page.settings, {});
   const blocks = normalizeBlocks(parseJson<Block[]>(page.blocks, []));
-  const origin = process.env.APP_URL || new URL(req.url).origin;
+  const origin = resolvedAppUrl();
 
   // hm=1 suppresses the tracker; preview=1 lets a draft export.
   const rendered = await fetch(

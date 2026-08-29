@@ -18,7 +18,7 @@ import { EXPLORE_MIN } from "@/lib/bandit";
 import { clearSimulation, simulateTraffic } from "@/lib/simulate";
 import { dnsPlan, verifyDomain } from "@/lib/domains";
 import { readBrand } from "@/lib/brand";
-import { wildcardRoot } from "@/lib/hosts";
+import { appUrl, wildcardRoot } from "@/lib/hosts";
 import { lintBlocks, reviewCopy } from "@/lib/copyreview";
 import { upgradeMessage, type Entitlements } from "@/lib/plan";
 
@@ -622,7 +622,7 @@ export async function runTool(
           }
         }
 
-        const base = process.env.APP_URL || "http://localhost:4400";
+        const base = appUrl();
         return {
           pageId,
           status: live ? "live" : "draft",
@@ -869,7 +869,7 @@ Write one variant for each of these angles: ${angles.join(", ")}`,
         if (!ctx.ents.canExport) return { error: upgradeMessage("export"), upgradeRequired: true };
         const page = await ownedPage(pageId, ctx);
         if (!page) return { error: "No page with that id." };
-        const base = process.env.APP_URL || "http://localhost:4400";
+        const base = appUrl();
         const query = input.variantId ? `?v=${String(input.variantId)}` : "";
         return {
           downloadUrl: `${base}/api/pages/${pageId}/export${query}`,

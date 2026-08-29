@@ -9,5 +9,14 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: { path: "prisma/migrations" },
   engine: "classic",
-  datasource: { url: process.env.DATABASE_URL ?? "file:./dev.db" },
+  // Migrations get DIRECT_URL, never DATABASE_URL.
+  //
+  // Setting `datasource.url` here overrides the schema's datasource block
+  // wholesale, `directUrl` included — so pointing this at DATABASE_URL sends
+  // DDL through the transaction pooler, where advisory locks do not exist and
+  // `prisma migrate deploy` hangs with no error and no timeout. Prefer the
+  // direct URL and fall back only when there isn't one.
+  datasource: {
+    url: process.env.DIRECT_URL || process.env.DATABASE_URL || "file:./dev.db",
+  },
 });

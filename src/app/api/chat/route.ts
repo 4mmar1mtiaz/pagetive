@@ -6,6 +6,7 @@ import { countMessage, resolveKey } from "@/lib/byok";
 import { systemPrompt } from "@/lib/prompt";
 import { runTool, TOOLS } from "@/lib/tools";
 import { currentSession } from "@/lib/account";
+import { appUrl as resolvedAppUrl } from "@/lib/hosts";
 
 /**
  * The chat endpoint — the whole interface, really.
@@ -85,7 +86,7 @@ export async function POST(req: Request) {
     { role: "user", content: text },
   ];
 
-  const appUrl = process.env.APP_URL || "http://localhost:4400";
+  const appUrl = resolvedAppUrl();
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
