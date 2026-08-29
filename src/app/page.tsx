@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { currentSession } from "@/lib/account";
 import { servePage } from "@/lib/serve";
 import { LP_CSS } from "@/styles/lp-css";
@@ -19,7 +20,16 @@ import { Workspace } from "@/components/Workspace";
  */
 export const dynamic = "force-dynamic";
 
-const MARKETING_SLUG = process.env.MARKETING_SLUG || "adaptive-lp-landing-page";
+/**
+ * The page served at "/" to signed-out visitors, if any.
+ *
+ * Blank is a real answer, and the common one once the marketing site has its
+ * own hostname: the app's own domain is then a front door for people who
+ * already have an account or are about to make one, and it should say so in
+ * one redirect rather than showing a placeholder about a page that is
+ * deliberately somewhere else.
+ */
+const MARKETING_SLUG = process.env.MARKETING_SLUG?.trim() || "";
 
 export default async function Home({
   searchParams,
@@ -33,30 +43,19 @@ export default async function Home({
 
   if (!session.anonymous) return <Workspace clerkOn={clerkOn} />;
 
+  // No marketing page configured: this domain is the app, so the front door is
+  // the way in. Sign-in rather than sign-up because the widget links to the
+  // other one and a returning user is the likelier visitor to a bare root.
+  if (!MARKETING_SLUG) redirect("/sign-in");
+
   const sp = await searchParams;
   const served = await servePage({ slug: MARKETING_SLUG, searchParams: sp });
   const githubUrl = process.env.GITHUB_URL?.trim() || null;
 
-  // No marketing page published yet: say so plainly rather than 404ing the
-  // front door of the product.
-  if (!served) {
-    return (
-      <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
-        <div className="glass" style={{ padding: 28, maxWidth: 460, textAlign: "center" }}>
-          <div className="chrome" style={{ fontSize: 20, fontWeight: 640, marginBottom: 8 }}>
-            Adaptive LP
-          </div>
-          <p className="sm" style={{ marginBottom: 18 }}>
-            No marketing page is published yet. Build one in the workspace and publish it, or set
-            MARKETING_SLUG.
-          </p>
-          <Link className="btn primary" href="/sign-in">
-            Sign in
-          </Link>
-        </div>
-      </main>
-    );
-  }
+  // Configured but not servable — wrong slug, or still a draft. Same answer as
+  // no page at all: send them somewhere that works instead of explaining a
+  // configuration problem to a stranger.
+  if (!served) redirect("/sign-in");
 
   return (
     <>
