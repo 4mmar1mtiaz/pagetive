@@ -144,6 +144,9 @@ export function Rail({
       setDomainError(data.error);
       return;
     }
+    // Registering with the host can fail while the row is created fine. Say so
+    // here rather than letting the domain sit looking attached and serving 404.
+    if (data.platform && data.platform.ok === false) setDomainError(data.platform.detail);
     setNewHost("");
     const list = await fetch(`/api/pages/${page.id}/domains`).then((r) => r.json());
     setDomains(list.domains ?? []);
@@ -484,8 +487,9 @@ export function Rail({
             ))}
             {domains.length === 0 ? (
               <div className="note">
-                No hostname attached — the page lives on /p/{page.slug}. Set WILDCARD_ROOT in .env and every
-                subdomain of it works instantly with no DNS work per page.
+                No hostname attached — the page lives on /p/{page.slug}. Set WILDCARD_ROOT and every subdomain
+                of it works the moment you save it, with no DNS and no certificate work per page. A customer&apos;s
+                own hostname needs one CNAME from them; registering it with the host happens here automatically.
               </div>
             ) : null}
           </div>

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { dnsPlan } from "@/lib/domains";
 import { assertOwns, currentSession } from "@/lib/account";
 import { upgradeMessage } from "@/lib/plan";
+import { attachHostname } from "@/lib/platform";
 
 export const dynamic = "force-dynamic";
 
@@ -52,9 +53,21 @@ export async function POST(req: Request, { params }: Ctx) {
   }
 
   const plan = dnsPlan(hostname);
+
+  // Register with whatever is serving HTTPS in front of this app, now, rather
+  // than leaving it as a step somebody has to know about. Without it the
+  // hostname resolves, answers 404, and has no certificate — which looks
+  // exactly like a product that does not work.
+  const platform = await attachHostname(hostname);
+
   const domain = await prisma.domain.create({
-    data: { hostname, pageId: id, verified: plan.kind === "wildcard" },
+    data: {
+      hostname,
+      pageId: id,
+      verified: plan.kind === "wildcard",
+      note: platform.noop ? null : platform.detail,
+    },
   });
 
-  return NextResponse.json({ domain, plan });
+  return NextResponse.json({ domain, plan, platform });
 }

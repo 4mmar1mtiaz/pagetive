@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { hasApiKey } from "@/lib/llm";
 import { appUrl, wildcardRoot } from "@/lib/hosts";
 import { storageReady } from "@/lib/storage";
+import { platformConfigured } from "@/lib/platform";
 import { currentSession } from "@/lib/account";
 
 /**
@@ -89,6 +90,20 @@ export async function GET(req: Request) {
     storageReady()
       ? "Supabase Storage configured"
       : "not set — SUPABASE_URL and SUPABASE_SECRET_KEY are needed before images or video can be uploaded",
+  );
+
+  // Not a failure when unset: a wildcard root, or a proxy that already answers
+  // on every hostname, are both complete answers. It is reported because a
+  // customer domain that 404s with valid DNS is otherwise unexplainable.
+  const wildcard = wildcardRoot();
+  add(
+    "Custom domain registration",
+    true,
+    platformConfigured()
+      ? "automatic — a hostname attached to a page is registered with the host in the same request"
+      : wildcard
+        ? `manual for hostnames outside *.${wildcard} — set VERCEL_API_TOKEN and VERCEL_PROJECT_ID to automate them`
+        : "manual — set VERCEL_API_TOKEN and VERCEL_PROJECT_ID, or a WILDCARD_ROOT, or customer hostnames will 404 with no certificate",
   );
 
   const clerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY);
