@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { UserButton } from "@clerk/nextjs";
 import { Chat } from "@/components/Chat";
 import { KeyPanel } from "@/components/KeyPanel";
@@ -32,11 +32,19 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
   const [showKeyPanel, setShowKeyPanel] = useState(false);
   const [freeLeft, setFreeLeft] = useState<number | null>(null);
 
+  // Only the very first load picks a page. Every later refresh must leave the
+  // selection alone: "New page" deliberately clears it, and re-selecting on the
+  // next poll would put the preview back and undo the button.
+  const selectedOnce = useRef(false);
+
   const loadPages = useCallback(async () => {
     const r = await fetch("/api/pages").then((x) => x.json());
     setPages(r.pages ?? []);
     if (r.plan) setPlan(r.plan);
-    setActivePageId((current) => current ?? r.pages?.[0]?.id ?? null);
+    if (!selectedOnce.current && r.pages?.[0]?.id) {
+      selectedOnce.current = true;
+      setActivePageId((current) => current ?? r.pages[0].id);
+    }
   }, []);
 
   const loadChats = useCallback(async () => {
@@ -62,10 +70,52 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
     );
   }
 
+  /**
+   * Another conversation about the page already on screen.
+   *
+   * The preview deliberately stays: you are still working on this page, you
+   * just want a clean thread to do it in.
+   */
   function newChat() {
     setChatId(null);
-    setChatTitle("New page");
     setTurns([]);
+    setTurnCost(null);
+    const page = pages.find((p) => p.id === activePageId);
+    setChatTitle(page ? `New chat · ${page.name}` : "New chat");
+  }
+
+  /**
+   * A blank slate for something that does not exist yet.
+   *
+   * Clearing the selection is the point: with no page selected the preview goes
+   * empty and the agent is told to build rather than edit.
+   */
+  function newPage() {
+    setChatId(null);
+    setTurns([]);
+    setTurnCost(null);
+    setActivePageId(null);
+    setChatTitle("New page");
+  }
+
+  /**
+   * Selecting a page brings its conversation with it.
+   *
+   * A thread is bound to the page it built, so the preview and the transcript
+   * always describe the same thing. A page with no thread yet gets an empty one
+   * rather than inheriting whatever was on screen.
+   */
+  function selectPage(id: string) {
+    setActivePageId(id);
+    const thread = chats.find((c) => c.pageId === id);
+    if (thread) {
+      openChat(thread.id, thread.title);
+      return;
+    }
+    setChatId(null);
+    setTurns([]);
+    setTurnCost(null);
+    setChatTitle(pages.find((p) => p.id === id)?.name ?? "New chat");
   }
 
   const send = useCallback(
@@ -94,7 +144,7 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ chatId, message: text }),
+          body: JSON.stringify({ chatId, message: text, pageId: activePageId }),
         });
         if (!res.body) throw new Error("No response stream");
 
@@ -190,7 +240,7 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
         setRefreshKey((k) => k + 1);
       }
     },
-    [chatId, input, streaming, loadChats, loadPages],
+    [chatId, activePageId, input, streaming, loadChats, loadPages],
   );
 
   const activePage = pages.find((p) => p.id === activePageId) ?? null;
@@ -206,9 +256,21 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
           </div>
         </div>
 
-        <div style={{ padding: "0 14px 12px" }}>
-          <button className="btn primary" style={{ width: "100%" }} onClick={newChat}>
+        <div style={{ padding: "0 14px 12px", display: "flex", gap: 8 }}>
+          <button className="btn primary" style={{ flex: 1 }} onClick={newPage}>
             + New page
+          </button>
+          <button
+            className="btn ghost"
+            style={{ flex: 1 }}
+            onClick={newChat}
+            title={
+              activePageId
+                ? "A fresh thread about the page you have selected"
+                : "Select a page first, or start a new one"
+            }
+          >
+            + New chat
           </button>
         </div>
 
@@ -221,7 +283,7 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
             <button
               key={p.id}
               className={`item ${p.id === activePageId ? "active" : ""}`}
-              onClick={() => setActivePageId(p.id)}
+              onClick={() => selectPage(p.id)}
             >
               <div className="row">
                 <span className="truncate">{p.name}</span>
@@ -245,7 +307,10 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
             <button
               key={c.id}
               className={`item ${c.id === chatId ? "active" : ""}`}
-              onClick={() => openChat(c.id, c.title)}
+              onClick={() => {
+                openChat(c.id, c.title);
+                setActivePageId(c.pageId);
+              }}
             >
               <div className="truncate">{c.title}</div>
             </button>

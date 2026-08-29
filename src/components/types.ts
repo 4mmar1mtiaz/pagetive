@@ -11,7 +11,9 @@ export type PageRow = {
   updatedAt: string;
 };
 
-export type ChatRow = { id: string; title: string; updatedAt: string };
+/** `pageId` is the page this thread is about, set the first time a tool in it
+ *  touches one. Null means the thread has not built anything yet. */
+export type ChatRow = { id: string; title: string; pageId: string | null; updatedAt: string };
 
 export type ToolCall = {
   name: string;

@@ -42,7 +42,11 @@ function toMessages(rows: Stored[]): Anthropic.MessageParam[] {
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => ({}))) as { chatId?: string; message?: string };
+  const body = (await req.json().catch(() => ({}))) as {
+    chatId?: string;
+    message?: string;
+    pageId?: string | null;
+  };
   const text = (body.message ?? "").trim();
   if (!text) return new Response("Nothing to say", { status: 400 });
 
@@ -67,12 +71,35 @@ export async function POST(req: Request) {
     );
   }
 
+  // A thread belongs to a page. The client sends whichever page is selected in
+  // the rail, and that is what this turn operates on — the agent no longer has
+  // to guess which of someone's pages "the page" means.
+  const selectedPageId = body.pageId ?? null;
+
   const chat = body.chatId
     ? await prisma.chat.findUnique({ where: { id: body.chatId } })
-    : await prisma.chat.create({ data: { title: text.slice(0, 60), ownerId: session.accountId } });
+    : await prisma.chat.create({
+        data: { title: text.slice(0, 60), ownerId: session.accountId, pageId: selectedPageId },
+      });
   if (!chat || chat.ownerId !== session.accountId) {
     return new Response("Unknown chat", { status: 404 });
   }
+
+  // An existing thread follows the selection. Reopening an old thread against a
+  // different page is a legitimate thing to do, and silently keeping the old
+  // binding would send the edits to the wrong page.
+  if (selectedPageId && chat.pageId !== selectedPageId) {
+    chat.pageId = selectedPageId;
+    await prisma.chat.update({ where: { id: chat.id }, data: { pageId: selectedPageId } });
+  }
+
+  // Only pages this account owns. A stale or forged id must not widen access.
+  const selectedPage = chat.pageId
+    ? await prisma.page.findFirst({
+        where: { id: chat.pageId, ownerId: session.accountId },
+        select: { id: true, name: true, slug: true, status: true },
+      })
+    : null;
 
   const history = await prisma.message.findMany({
     where: { chatId: chat.id },
@@ -107,11 +134,18 @@ export async function POST(req: Request) {
           ? `\n\nThis user is on the ${session.ents.label}: ${session.ents.maxPages} landing page total, and they cannot publish, export, or attach a domain. Build freely — everything else works, including variants, simulated traffic and the heatmap. If they ask to go live or download, say plainly that it needs the unlimited plan; do not apologise repeatedly or pitch.`
           : "";
 
+        // Which page this turn is about, stated rather than inferred. Without
+        // it the agent calls list_pages and picks, which is how an edit meant
+        // for one page lands on another.
+        const pageNote = selectedPage
+          ? `\n\nThe user has "${selectedPage.name}" selected (pageId ${selectedPage.id}, slug ${selectedPage.slug}, ${selectedPage.status}). Every page tool this turn takes that pageId unless they name a different page outright. Do not call list_pages to work out which page they mean, and do not create a new page when they ask to change something — they are looking at this one.`
+          : `\n\nNo page is selected. The user is starting something new, so build rather than edit: ask for their website and their offer in one message, call read_brand, then create_page. Do not go hunting through their existing pages.`;
+
         for (let turn = 0; turn < MAX_TURNS; turn++) {
           const run = anthropic.messages.stream({
             model: MODEL,
             max_tokens: 32000,
-            system: systemPrompt(appUrl) + planNote,
+            system: systemPrompt(appUrl) + planNote + pageNote,
             thinking: { type: "adaptive" },
             output_config: { effort: "high" },
             tools: TOOLS,
@@ -157,6 +191,14 @@ export async function POST(req: Request) {
               apiKey: key.apiKey,
             });
             send({ type: "tool_done", name: call.name, result });
+
+            // First page this thread touches becomes the thread's page, so the
+            // rail can reopen the conversation that built it.
+            const producedId = (result as { pageId?: unknown }).pageId;
+            if (!chat.pageId && typeof producedId === "string") {
+              chat.pageId = producedId;
+              await prisma.chat.update({ where: { id: chat.id }, data: { pageId: producedId } });
+            }
             results.push({
               type: "tool_result",
               tool_use_id: call.id,
