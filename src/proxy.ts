@@ -49,6 +49,14 @@ const isPublic = createRouteMatcher([
   "/api/webhooks/(.*)",
   "/sign-in(.*)",
   "/sign-up(.*)",
+  // Crawler and social-scraper surface. These have no session and never will,
+  // so leaving them behind auth means a shared link renders with no card and
+  // robots.txt answers a redirect to sign-in.
+  "/robots.txt",
+  "/sitemap.xml",
+  "/icon",
+  "/opengraph-image",
+  "/favicon.ico",
 ]);
 
 function hostRewrite(request: NextRequest): URL | null {

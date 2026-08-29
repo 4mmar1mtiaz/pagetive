@@ -8,6 +8,7 @@ import { MediaDialog } from "@/components/MediaDialog";
 import { Rail } from "@/components/Rail";
 import type { AssetRow, ChatRow, PageRow, PlanState, Turn } from "@/components/types";
 import { Spinner } from "@/components/Spinner";
+import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/brand-name";
 
 /**
  * The whole app is this screen: what you have on the left, the conversation in
@@ -273,8 +274,8 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
         <div className="brand">
           <div className="mark" />
           <div>
-            <div className="name chrome">Adaptive LP</div>
-            <div className="sub">one page, many versions</div>
+            <div className="name chrome">{PRODUCT_NAME}</div>
+            <div className="sub">{PRODUCT_TAGLINE}</div>
           </div>
         </div>
 

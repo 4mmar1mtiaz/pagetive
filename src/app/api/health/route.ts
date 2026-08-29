@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { hasApiKey } from "@/lib/llm";
 import { appUrl, wildcardRoot } from "@/lib/hosts";
 import { storageReady } from "@/lib/storage";
+import { currentSession } from "@/lib/account";
 
 /**
  * Why a deployment is broken, in one request.
@@ -30,7 +31,32 @@ function describeUrl(raw: string | undefined): string {
   }
 }
 
-export async function GET() {
+/**
+ * Who is allowed to see the detail.
+ *
+ * The point of this endpoint is that a broken deployment can explain itself,
+ * and that only works if it is reachable before anyone can sign in. But the
+ * detail is a map of the stack — the database host, its region, which vendors
+ * are wired — and handing that to the whole internet is a finding, not a
+ * feature. Signed in, or holding the shared secret, gets the full report;
+ * everyone else gets the one bit that matters, which is whether it is up.
+ */
+async function maySeeDetail(req: Request): Promise<boolean> {
+  const secret = process.env.HEALTH_TOKEN?.trim();
+  if (secret) {
+    const url = new URL(req.url);
+    const header = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+    if (url.searchParams.get("token") === secret || header === secret) return true;
+  }
+  try {
+    const session = await currentSession();
+    return !session.anonymous;
+  } catch {
+    return false;
+  }
+}
+
+export async function GET(req: Request) {
   const checks: Check[] = [];
   const add = (name: string, ok: boolean, detail: string) => checks.push({ name, ok, detail });
 
@@ -119,6 +145,25 @@ export async function GET() {
   }
 
   const failed = checks.filter((c) => !c.ok);
+  const status = failed.length === 0 ? 200 : 503;
+
+  if (!(await maySeeDetail(req))) {
+    // Names of failing checks, never their detail. Enough for an uptime
+    // monitor and for someone to say "the database check is red" out loud,
+    // without publishing the hostname it failed to reach.
+    return NextResponse.json(
+      {
+        ok: failed.length === 0,
+        summary:
+          failed.length === 0
+            ? "Everything this deployment needs is present and working."
+            : `${failed.length} check${failed.length === 1 ? "" : "s"} failing: ${failed.map((c) => c.name).join(", ")}`,
+        detail: "Sign in, or pass the HEALTH_TOKEN, to see the full report.",
+      },
+      { status },
+    );
+  }
+
   return NextResponse.json(
     {
       ok: failed.length === 0,
@@ -128,6 +173,6 @@ export async function GET() {
           : `${failed.length} check${failed.length === 1 ? "" : "s"} failing: ${failed.map((c) => c.name).join(", ")}`,
       checks,
     },
-    { status: failed.length === 0 ? 200 : 503 },
+    { status },
   );
 }

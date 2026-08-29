@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { PRODUCT_NAME } from "@/lib/brand-name";
 
 /**
  * Whose Anthropic key pays for a turn.
@@ -45,7 +46,7 @@ export async function resolveKey(accountId: string): Promise<KeyResolution> {
   if (account.messagesUsed >= FREE_MESSAGES) {
     return {
       ok: false,
-      reason: `You have used your ${FREE_MESSAGES} free messages. Adaptive LP is free, but the AI that writes your pages is not, so from here it runs on your own Anthropic key. Paste one in settings and everything keeps working exactly as it did. Your published pages, traffic and reports are unaffected and always will be.`,
+      reason: `You have used your ${FREE_MESSAGES} free messages. ${PRODUCT_NAME} is free, but the AI that writes your pages is not, so from here it runs on your own Anthropic key. Paste one in settings and everything keeps working exactly as it did. Your published pages, traffic and reports are unaffected and always will be.`,
       used: account.messagesUsed,
       limit: FREE_MESSAGES,
     };

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PRODUCT_NAME } from "@/lib/brand-name";
 
 /**
  * Where somebody puts their own Anthropic key.
@@ -69,7 +70,7 @@ export function KeyPanel({
         {message ??
           (info?.hasOwnKey
             ? `Saved as ${info.keyHint}. Every page you build runs on your key, unmetered.`
-            : `Adaptive LP is free. The AI that writes your pages is not, so ${info?.freeRemaining ?? 0} free messages are on the house and after that it runs on your own key. A key costs a few cents per page. Your published pages, traffic, reports and leads are never metered.`)}
+            : `${PRODUCT_NAME} is free. The AI that writes your pages is not, so ${info?.freeRemaining ?? 0} free messages are on the house and after that it runs on your own key. A key costs a few cents per page. Your published pages, traffic, reports and leads are never metered.`)}
       </p>
 
       <div style={{ display: "flex", gap: 8 }}>

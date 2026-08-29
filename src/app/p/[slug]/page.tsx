@@ -14,10 +14,53 @@ type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+/**
+ * A published page's own card, not the product's.
+ *
+ * A landing page is made to be shared into the exact places that render link
+ * previews, so inheriting the app's title and image would put the builder's
+ * branding on the customer's ad destination. The title is also set flat rather
+ * than through the layout's template, for the same reason: nobody's landing
+ * page should say "· Pagetive" after its headline.
+ */
 export async function generateMetadata({ params }: Props) {
   const { slug } = await params;
-  const page = await prisma.page.findUnique({ where: { slug }, select: { name: true, goal: true } });
-  return { title: page?.name ?? "Landing page", description: page?.goal ?? "" };
+  const page = await prisma.page.findUnique({
+    where: { slug },
+    select: { name: true, goal: true, blocks: true },
+  });
+  if (!page) return { title: "Landing page" };
+
+  const title = page.name || "Landing page";
+  const description = page.goal || "";
+
+  // The hero image, if the page has one, is the right social card: it is what
+  // the visitor sees a second later.
+  let image: string | undefined;
+  try {
+    const blocks = JSON.parse(page.blocks) as { imageUrl?: string; mediaUrl?: string; mediaKind?: string }[];
+    const withImage = blocks.find((b) => b.imageUrl || (b.mediaUrl && b.mediaKind !== "video"));
+    image = withImage?.imageUrl ?? withImage?.mediaUrl;
+  } catch {
+    image = undefined;
+  }
+
+  return {
+    title: { absolute: title },
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "website",
+      ...(image ? { images: [{ url: image }] } : {}),
+    },
+    twitter: {
+      card: image ? ("summary_large_image" as const) : ("summary" as const),
+      title,
+      description,
+      ...(image ? { images: [image] } : {}),
+    },
+  };
 }
 
 export default async function PublicPage({ params, searchParams }: Props) {

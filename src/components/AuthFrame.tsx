@@ -8,6 +8,7 @@
  * product: near-white, slightly translucent so the background still reads
  * through it, with the app's dark ink on top.
  */
+import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/brand-name";
 export function AuthFrame({
   heading,
   sub,
@@ -24,7 +25,7 @@ export function AuthFrame({
           <div className="mark" style={{ width: 30, height: 30, borderRadius: 9 }} />
           <div>
             <div className="chrome" style={{ fontWeight: 640, fontSize: 17, letterSpacing: "-0.01em" }}>
-              Adaptive LP
+              {PRODUCT_NAME}
             </div>
             <div
               style={{
@@ -34,7 +35,7 @@ export function AuthFrame({
                 textTransform: "uppercase",
               }}
             >
-              one page, many versions
+              {PRODUCT_TAGLINE}
             </div>
           </div>
         </div>

@@ -2,13 +2,42 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
+import { appUrl } from "@/lib/hosts";
+import { PRODUCT_DESCRIPTION, PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/brand-name";
 
 const sans = Inter({ variable: "--font-sans", subsets: ["latin"] });
 const mono = JetBrains_Mono({ variable: "--font-mono", subsets: ["latin"] });
 
+/**
+ * Defaults for every screen the app itself renders.
+ *
+ * metadataBase is what makes the social card work: relative image paths in
+ * openGraph are resolved against it, and without it Next emits a relative URL
+ * that no scraper can fetch, so a shared link renders as a bare string. It has
+ * to be the deployment's own origin, which is why it comes from appUrl()
+ * rather than a constant.
+ *
+ * Published landing pages set their own title and description over these.
+ */
 export const metadata: Metadata = {
-  title: "Adaptive LP",
-  description: "Describe a landing page. It gets built, published, tracked, and it keeps testing itself.",
+  metadataBase: new URL(appUrl()),
+  title: { default: PRODUCT_NAME, template: `%s · ${PRODUCT_NAME}` },
+  description: PRODUCT_DESCRIPTION,
+  applicationName: PRODUCT_NAME,
+  openGraph: {
+    type: "website",
+    siteName: PRODUCT_NAME,
+    title: `${PRODUCT_NAME} — ${PRODUCT_TAGLINE}`,
+    description: PRODUCT_DESCRIPTION,
+    url: appUrl(),
+    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: PRODUCT_NAME }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${PRODUCT_NAME} — ${PRODUCT_TAGLINE}`,
+    description: PRODUCT_DESCRIPTION,
+    images: ["/opengraph-image"],
+  },
 };
 
 // Clerk is optional. With no keys the app runs as a single local account, so
