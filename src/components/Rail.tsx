@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { PageAnalytics } from "@/lib/analytics";
 import type { PageRow, PlanState } from "@/components/types";
 import { Spinner } from "@/components/Spinner";
+import { SharePanel } from "@/components/SharePanel";
 
 /**
  * The right-hand rail: the page as it actually looks, the numbers it is
@@ -37,6 +38,8 @@ export function Rail({
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
   const [frameKey, setFrameKey] = useState(0);
+  /** Which variant the preview is pinned to. Null means "let the optimizer pick". */
+  const [previewVariant, setPreviewVariant] = useState<string | null>(null);
   const [simming, setSimming] = useState(false);
   const [domains, setDomains] = useState<
     { id: string; hostname: string; verified: boolean; note: string | null; plan: { records: { type: string; name: string; value: string }[]; explain: string; ready: boolean } }[]
@@ -59,6 +62,12 @@ export function Rail({
   useEffect(() => {
     setFrameKey((k) => k + 1);
   }, [refreshKey, pageId]);
+
+  // A variant id belongs to one page. Carrying it to the next one would pin the
+  // preview to something that does not exist there.
+  useEffect(() => {
+    setPreviewVariant(null);
+  }, [pageId]);
 
   useEffect(() => {
     if (!pageId) return;
@@ -214,9 +223,37 @@ export function Rail({
     );
   }
 
+  /**
+   * Somebody else's page, added here from a share link.
+   *
+   * Nothing that writes is rendered for it — not disabled, absent. A greyed-out
+   * publish button on a page you do not own is an invitation to ask why, and
+   * the answer is never going to change.
+   */
+  const readOnly = Boolean(page.shared);
+
   const canPublish = plan?.canPublish ?? true;
   const canExport = plan?.canExport ?? true;
   const canDomain = plan?.canAttachDomain ?? true;
+
+  /**
+   * Seeing one specific variant.
+   *
+   * No new serving path for this: `?v=` already forces a variant, because that
+   * is how a campaign link hard-routes to its own copy (src/lib/serve.ts). It
+   * returns the variant without writing an assignment, so pinning the preview
+   * does not stick the visitor cookie to whatever was looked at last.
+   *
+   * `hm=1` rides along because it turns the tracker off. Reading your own page
+   * four times in a row would otherwise add four impressions to it, and
+   * impressions are the denominator the optimizer divides conversions by.
+   */
+  // Retired variants are excluded from the serving query, so pinning one would
+  // silently fall back to the optimizer's pick and look like a broken button.
+  const variants = (stats?.variants ?? []).filter((v) => v.active);
+  const pinned = variants.some((v) => v.id === previewVariant) ? previewVariant : null;
+  const previewSrc = `/p/${page.slug}?preview=1&hm=1${pinned ? `&v=${pinned}` : ""}`;
+  const openHref = pinned ? previewSrc : `/p/${page.slug}?preview=1`;
 
   const field = (key: string, label: string, placeholder: string) => (
     <div className="field-row" key={key}>
@@ -250,8 +287,41 @@ export function Rail({
 
       {tab === "preview" ? (
         <>
+          {variants.length > 1 ? (
+            <div
+              style={{
+                display: "flex",
+                gap: 6,
+                alignItems: "center",
+                flexWrap: "wrap",
+                padding: "10px 12px",
+                borderBottom: "1px solid var(--line)",
+              }}
+            >
+              <span className="sm">Showing:</span>
+              <div className="tabs">
+                <button
+                  className={`tab ${pinned ? "" : "active"}`}
+                  onClick={() => setPreviewVariant(null)}
+                  title="Whatever the optimizer would serve a real visitor"
+                >
+                  auto
+                </button>
+                {variants.map((v) => (
+                  <button
+                    key={v.id}
+                    className={`tab ${pinned === v.id ? "active" : ""}`}
+                    onClick={() => setPreviewVariant(v.id)}
+                    title={v.angle || v.name}
+                  >
+                    {v.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="frame-wrap" style={{ flex: 1 }}>
-            <iframe key={frameKey} src={`/p/${page.slug}?preview=1&hm=1`} title="Preview" />
+            <iframe key={`${frameKey}:${pinned ?? "auto"}`} src={previewSrc} title="Preview" />
           </div>
           <div
             style={{
@@ -267,9 +337,9 @@ export function Rail({
               {page.status === "live" ? "Live" : "Draft — not public"}
             </span>
             <a className="btn sm ghost" href={`/pages/${page.id}`}>
-              Heatmap
+              Report
             </a>
-            <a className="btn sm ghost" href={`/p/${page.slug}?preview=1`} target="_blank" rel="noreferrer">
+            <a className="btn sm ghost" href={openHref} target="_blank" rel="noreferrer">
               Open
             </a>
             {canExport ? (
@@ -277,6 +347,9 @@ export function Rail({
                 Export
               </a>
             ) : null}
+            {readOnly ? (
+              <span className="sm">shared with you · read-only</span>
+            ) : (
             <button
               className="btn sm primary"
               onClick={publish}
@@ -291,6 +364,7 @@ export function Rail({
                 "Publish"
               )}
             </button>
+            )}
           </div>
           {blocked || (!canPublish && page.status !== "live") ? (
             <div className="note" style={{ margin: "0 12px 12px" }}>
@@ -303,6 +377,16 @@ export function Rail({
 
       {tab === "data" ? (
         <div className="rail-body pad">
+          {/* This tab is a glance. The full report is a screen, and nothing here
+              said so, so it went unfound. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 12 }}>
+            <span className="sm" style={{ flex: 1 }}>
+              Summary — trends, sources, funnel, leads and per-version preview are in the report.
+            </span>
+            <a className="btn sm primary" href={`/pages/${page.id}`}>
+              Full report →
+            </a>
+          </div>
           <div className="kpis">
             <div className="kpi">
               <div className="v">{stats?.totals.views ?? 0}</div>
@@ -364,6 +448,8 @@ export function Rail({
             ))}
           </div>
 
+          {readOnly ? null : (
+          <>
           <div className="side-label" style={{ padding: "18px 0 8px" }}>
             Test data
           </div>
@@ -379,6 +465,8 @@ export function Rail({
             Synthetic visitors over the last 14 days. Each variant gets a hidden true conversion rate, so the
             optimizer has a real winner to find. Clear removes them without touching real traffic.
           </div>
+          </>
+          )}
 
           {spend ? (
             <div className="note" style={{ marginTop: 10 }}>
@@ -388,8 +476,19 @@ export function Rail({
         </div>
       ) : null}
 
-      {tab === "setup" ? (
+      {tab === "setup" && readOnly ? (
         <div className="rail-body pad">
+          <div className="note">
+            This page was shared with you. You can read it and watch its report; where the leads go,
+            which domains it answers on, and whether it is live are the owner&apos;s to set.
+          </div>
+        </div>
+      ) : null}
+
+      {tab === "setup" && !readOnly ? (
+        <div className="rail-body pad">
+          <SharePanel pageId={page.id} />
+
           {field("crmWebhookUrl", "CRM webhook", "https://hooks.zapier.com/… or your GHL inbound URL")}
           {field("notifyEmail", "Notify email", "you@company.com, sales@company.com")}
           {field("calendarUrl", "Calendar embed", "https://cal.com/you/30min")}

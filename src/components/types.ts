@@ -8,6 +8,8 @@ export type PageRow = {
   impressions: number;
   conversions: number;
   leads: number;
+  /** Shared with this account by its owner, so it is read-only here. */
+  shared?: boolean;
   updatedAt: string;
 };
 

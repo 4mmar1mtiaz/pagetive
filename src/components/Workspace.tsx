@@ -302,20 +302,43 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
             <span>Pages</span>
             <span>{pages.length}</span>
           </div>
+          {/* The counts on this row are the reason somebody wants the report, so
+              the way into it belongs on this row rather than two clicks away. It
+              sits outside the button because a link inside a button is not a
+              thing browsers agree on. */}
           {pages.map((p) => (
-            <button
-              key={p.id}
-              className={`item ${p.id === activePageId ? "active" : ""}`}
-              onClick={() => selectPage(p.id)}
-            >
-              <div className="row">
-                <span className="truncate">{p.name}</span>
-                <span className={`dot ${p.status === "live" ? "live" : "draft"}`} />
-              </div>
-              <div className="meta">
-                {p.impressions} views · {p.leads} leads · {p.variants} variants
-              </div>
-            </button>
+            <div key={p.id} style={{ position: "relative" }}>
+              <button
+                className={`item ${p.id === activePageId ? "active" : ""}`}
+                onClick={() => selectPage(p.id)}
+                style={{ paddingRight: 66 }}
+              >
+                <div className="row">
+                  <span className="truncate">{p.name}</span>
+                  {/* A page somebody shared with you sits in the same list as
+                      your own, so it has to say which it is. */}
+                  {p.shared ? <span className="tag">shared</span> : null}
+                  <span className={`dot ${p.status === "live" ? "live" : "draft"}`} />
+                </div>
+                <div className="meta">
+                  {p.impressions} views · {p.leads} leads · {p.variants} variants
+                </div>
+              </button>
+              <a
+                href={`/pages/${p.id}`}
+                title="Traffic, versions, per-version preview, heatmap and leads"
+                style={{
+                  position: "absolute",
+                  right: 10,
+                  bottom: 8,
+                  fontSize: 11,
+                  color: "var(--silver-faint)",
+                  textDecoration: "none",
+                }}
+              >
+                report →
+              </a>
+            </div>
           ))}
           {loadingLists && pages.length === 0 ? (
             <div style={{ padding: "0 10px" }}>

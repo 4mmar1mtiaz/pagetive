@@ -52,10 +52,24 @@ export function clerkConfigured(): boolean {
   return Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY);
 }
 
-const LOCAL_ID = "local";
+/**
+ * The account single-user mode runs as.
+ *
+ * Overridable because "no auth vendor configured" and "no auth vendor
+ * configured, but pointed at the real database" are different situations. The
+ * second is a developer looking at production data locally, and forcing them
+ * onto a fresh empty `local` account there is useless — worse, the alternative
+ * they reach for is signing in against a test Clerk instance, which mints a
+ * second account for the same person in the real database.
+ *
+ * Inert in production, where Clerk is always configured and this is never read.
+ */
+const LOCAL_ID = process.env.LOCAL_ACCOUNT_ID || "local";
 
 /** The single account used when the app runs without Clerk. */
 async function localAccount(): Promise<Session> {
+  // `update: {}` on purpose: when LOCAL_ACCOUNT_ID names a real account, this
+  // reads it and changes nothing about it.
   const row = await prisma.account.upsert({
     where: { id: LOCAL_ID },
     create: { id: LOCAL_ID, plan: "unlimited", email: null },

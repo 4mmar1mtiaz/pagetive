@@ -5,10 +5,12 @@ import { prisma } from "@/lib/db";
 import { pageAnalytics } from "@/lib/analytics";
 import { pageReport, resolveRange } from "@/lib/report";
 import { currentSession } from "@/lib/account";
+import { accessTo } from "@/lib/share";
 import { Heatmap } from "@/components/Heatmap";
 import { Funnel } from "@/components/report/Funnel";
 import { TimeChart } from "@/components/report/TimeChart";
 import { RangePicker } from "@/components/report/RangePicker";
+import { VersionPreview } from "@/components/report/VersionPreview";
 import { Spinner } from "@/components/Spinner";
 
 export const dynamic = "force-dynamic";
@@ -39,11 +41,15 @@ function Delta({ now, before, invert }: { now: number; before: number | undefine
 export default async function PageDetail({ params, searchParams }: Props) {
   const { id } = await params;
   const sp = await searchParams;
-  const tab = sp.tab === "heatmap" ? "heatmap" : "report";
+  const tab = sp.tab === "heatmap" ? "heatmap" : sp.tab === "preview" ? "preview" : "report";
 
   const session = await currentSession();
   const page = await prisma.page.findUnique({ where: { id } });
-  if (!page || page.ownerId !== session.accountId) notFound();
+  if (!page) notFound();
+  // Owner or somebody the page was shared with. The report is read-only for
+  // both — there is nothing on this screen that writes.
+  const access = await accessTo(session.accountId, page.id);
+  if (access === "none") notFound();
 
   const range = resolveRange(sp.range, sp.from, sp.to);
   const report = await pageReport(id, { range, variantId: sp.v ?? null });
@@ -55,6 +61,9 @@ export default async function PageDetail({ params, searchParams }: Props) {
     if (sp.from) q.set("from", sp.from);
     if (sp.to) q.set("to", sp.to);
     if (sp.v) q.set("v", sp.v);
+    // Without this, changing the version from the Preview or Heatmap tab threw
+    // you back to Report — the one thing a tab switcher must never do.
+    if (sp.tab) q.set("tab", sp.tab);
     for (const [k, v] of Object.entries(extra)) {
       if (v) q.set(k, v);
       else q.delete(k);
@@ -75,18 +84,30 @@ export default async function PageDetail({ params, searchParams }: Props) {
           <div style={{ fontSize: 19, fontWeight: 600, letterSpacing: "-0.02em" }}>{page.name}</div>
           <div className="mono" style={{ fontSize: 12, color: "var(--silver-faint)" }}>
             /p/{page.slug} · {page.status} · {report.range.label}
+            {access === "viewer" ? " · shared with you" : ""}
           </div>
         </div>
         <div className="tabs">
           <Link className={`tab ${tab === "report" ? "active" : ""}`} href={keep({ tab: "" })}>
             Report
           </Link>
+          <Link className={`tab ${tab === "preview" ? "active" : ""}`} href={keep({ tab: "preview" })}>
+            Preview
+          </Link>
           <Link className={`tab ${tab === "heatmap" ? "active" : ""}`} href={keep({ tab: "heatmap" })}>
             Heatmap
           </Link>
         </div>
-        <a className="btn sm ghost" href={`/p/${page.slug}?preview=1`} target="_blank" rel="noreferrer">
-          Open page
+        {/* The version selected below is the version this opens. `?v=` forces it
+            the same way a campaign link does, and `hm=1` keeps the look out of
+            the impression count being read on this very screen. */}
+        <a
+          className="btn sm ghost"
+          href={sp.v ? `/p/${page.slug}?preview=1&hm=1&v=${sp.v}` : `/p/${page.slug}?preview=1`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {sp.v ? "Open this version" : "Open page"}
         </a>
       </div>
 
@@ -105,17 +126,27 @@ export default async function PageDetail({ params, searchParams }: Props) {
         <Suspense fallback={<Spinner block label="Loading the heatmap" />}>
           <RangePicker current={report.range.key} basePath={basePath} />
         </Suspense>
-        <span style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-          <span className="sm">Version:</span>
-          <Link className={`tab ${!sp.v ? "active" : ""}`} href={keep({ v: "" })}>
-            all
-          </Link>
-          {report.variants.map((v) => (
-            <Link key={v.id} className={`tab ${sp.v === v.id ? "active" : ""}`} href={keep({ v: v.id })}>
-              {v.name}
+        {/* Filters the numbers and the heatmap. The Preview tab carries its own
+            switcher, which is instant rather than a navigation, so this one
+            would be a second control for the same thing. */}
+        {tab === "preview" ? null : (
+          <span style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <span className="sm">Version:</span>
+            <Link className={`tab ${!sp.v ? "active" : ""}`} href={keep({ v: "" })}>
+              all
             </Link>
-          ))}
-        </span>
+            {report.variants.map((v) => (
+              <Link
+                key={v.id}
+                className={`tab ${sp.v === v.id ? "active" : ""}`}
+                href={keep({ v: v.id })}
+                title={v.angle || (v.isControl ? "the original" : v.name)}
+              >
+                {v.name}
+              </Link>
+            ))}
+          </span>
+        )}
       </div>
 
       {/* ---- headline numbers ---- */}
@@ -149,7 +180,17 @@ export default async function PageDetail({ params, searchParams }: Props) {
         </div>
       </div>
 
-      {tab === "heatmap" ? (
+      {tab === "preview" ? (
+        <VersionPreview
+          slug={page.slug}
+          // Retired versions are excluded from the serving query, so pinning one
+          // would quietly fall back to the optimizer's pick.
+          variants={report.variants
+            .filter((v) => v.active)
+            .map((v) => ({ id: v.id, name: v.name, angle: v.angle, isControl: v.isControl }))}
+          initialId={sp.v ?? null}
+        />
+      ) : tab === "heatmap" ? (
         <HeatmapTab pageId={id} slug={page.slug} variantId={sp.v ?? null} />
       ) : (
         <div className="report-grid">

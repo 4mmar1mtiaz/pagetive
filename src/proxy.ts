@@ -42,6 +42,9 @@ const isPublic = createRouteMatcher([
   "/",            // the marketing page; signed-in users get the workspace here
   "/p/(.*)",
   "/h/(.*)",
+  // A share link is the credential. Requiring a sign-in to open one would
+  // defeat the entire point of being able to send it to someone outside.
+  "/s/(.*)",
   "/api/track",
   "/api/tracker",
   "/api/lead",
@@ -72,6 +75,7 @@ function hostRewrite(request: NextRequest): URL | null {
     pathname.startsWith("/_next") ||
     pathname.startsWith("/h/") ||
     pathname.startsWith("/p/") ||
+    pathname.startsWith("/s/") ||
     pathname === "/favicon.ico"
   ) {
     return null;

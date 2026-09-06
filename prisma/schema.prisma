@@ -62,6 +62,8 @@ model Page {
   assignments Assignment[]
   versions    PageVersion[]
   domains     Domain[]
+  shares      Share[]
+  grants      PageGrant[]
   owner       Account?      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([status])
@@ -282,8 +284,60 @@ model Account {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  pages Page[]
-  chats Chat[]
+  pages  Page[]
+  chats  Chat[]
+  grants PageGrant[]
+}
+
+/// A link that shows one page and its report to somebody with no account.
+///
+/// The token is the whole credential, so it is generated with real randomness
+/// and is the only thing indexed — a share URL is looked up on every visit and
+/// must not become a scan. There is at most one live link per page: rotating is
+/// how you take access away from whoever already has the old URL, and offering
+/// a pile of simultaneous links only makes "who can see this?" unanswerable.
+///
+/// `revokedAt` rather than a delete, because the honest answer to "did anyone
+/// have access last Tuesday" is worth keeping, and a row is cheap.
+model Share {
+  id         String    @id @default(cuid())
+  pageId     String
+  token      String    @unique
+  /// Whether the numbers travel with the link, or only the page itself.
+  withReport Boolean   @default(true)
+  revokedAt  DateTime?
+  /// Cheap proof the link is being used, shown to the owner.
+  views      Int       @default(0)
+  lastViewAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([pageId])
+}
+
+/// A page somebody added to their own account from a share link.
+///
+/// Read-only by design: it puts the page and its live report in their
+/// workspace and nothing else. The owner keeps sole control of the content,
+/// which is the difference between sharing a page and handing it over.
+///
+/// Deliberately not deleted when the share link is revoked. Revoking a link
+/// stops new people getting in; it does not silently remove a page from the
+/// workspace of a colleague who is using it. Removing that is its own action.
+model PageGrant {
+  id        String   @id @default(cuid())
+  pageId    String
+  accountId String
+  /// Which link let them in, for the owner's "who has this" list.
+  shareId   String?
+  createdAt DateTime @default(now())
+
+  page    Page    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, accountId])
+  @@index([accountId])
 }
 
 /// A file the user uploaded to use on their pages.

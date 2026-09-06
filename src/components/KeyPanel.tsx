@@ -24,7 +24,12 @@ export function KeyPanel({
   const [key, setKey] = useState("");
   const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = useState("");
-  const [info, setInfo] = useState<{ hasOwnKey: boolean; keyHint: string | null; freeRemaining: number } | null>(null);
+  const [info, setInfo] = useState<{
+    hasOwnKey: boolean;
+    keyHint: string | null;
+    freeMessages: number;
+    freeRemaining: number;
+  } | null>(null);
 
   useEffect(() => {
     fetch("/api/account")
@@ -68,10 +73,23 @@ export function KeyPanel({
 
       <p className="sm" style={{ margin: "8px 0 12px" }}>
         {message ??
-          (info?.hasOwnKey
-            ? `Saved as ${info.keyHint}. Every page you build runs on your key, unmetered.`
-            : `${PRODUCT_NAME} is free. The AI that writes your pages is not, so ${info?.freeRemaining ?? 0} free messages are on the house and after that it runs on your own key. A key costs a few cents per page. Your published pages, traffic, reports and leads are never metered.`)}
+          // Until /api/account answers there is no number to quote, and quoting
+          // a placeholder reads as "you have none left" on a brand new account.
+          (!info
+            ? `${PRODUCT_NAME} is free. The AI that writes your pages is not, so your first messages are on us and after that it runs on your own key.`
+            : info.hasOwnKey
+              ? `Saved as ${info.keyHint}. Every page you build runs on your key, unmetered.`
+              : `${PRODUCT_NAME} is free. The AI that writes your pages is not, so the first ${info.freeMessages} messages are on us and after that it runs on your own key. A key costs a few cents per page. Your published pages, traffic, reports and leads are never metered.`)}
       </p>
+
+      {info && !info.hasOwnKey ? (
+        <p className="sm" style={{ margin: "0 0 12px", fontSize: 12 }}>
+          <strong style={{ color: info.freeRemaining ? "#fff" : "var(--bad)", fontWeight: 560 }}>
+            {info.freeRemaining} / {info.freeMessages}
+          </strong>{" "}
+          free messages remaining
+        </p>
+      ) : null}
 
       <div style={{ display: "flex", gap: 8 }}>
         <input

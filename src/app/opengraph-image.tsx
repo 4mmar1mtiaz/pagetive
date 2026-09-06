@@ -1,13 +1,14 @@
 import { ImageResponse } from "next/og";
 import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/brand-name";
+import { BRAND_MARK_DATA_URI } from "@/lib/brand-mark";
 
 /**
  * The card people actually see when the link is pasted somewhere.
  *
- * Generated rather than designed as a file for the same reason as the icon: it
- * cannot fall out of sync with the product's name, and a rebrand is one
- * constant away. Rendered at the size every scraper expects, so no platform
- * has to crop it.
+ * The layout is generated rather than exported as a flat image so the wording
+ * cannot fall out of sync with the product's name — a rebrand is one constant
+ * away. The mark itself is the real artwork, inlined (see lib/brand-mark).
+ * Rendered at the size every scraper expects, so no platform has to crop it.
  */
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
@@ -30,30 +31,9 @@ export default function OpenGraphImage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 44 }}>
-          <div style={{ display: "flex", position: "relative", width: 44, height: 44 }}>
-            <div
-              style={{
-                position: "absolute",
-                left: 0,
-                top: 2,
-                width: 29,
-                height: 40,
-                borderRadius: 6,
-                background: "#5b6470",
-              }}
-            />
-            <div
-              style={{
-                position: "absolute",
-                left: 15,
-                top: 6,
-                width: 29,
-                height: 40,
-                borderRadius: 6,
-                background: "#e6ebf2",
-              }}
-            />
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element -- Satori renders
+              this to a PNG; there is no browser here for next/image to help. */}
+          <img src={BRAND_MARK_DATA_URI} width={52} height={52} alt="" />
           <div style={{ fontSize: 34, fontWeight: 600, letterSpacing: -0.5 }}>{PRODUCT_NAME}</div>
         </div>
 

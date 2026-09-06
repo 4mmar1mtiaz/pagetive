@@ -128,7 +128,9 @@ button { font: inherit; color: inherit; }
   width: 26px;
   height: 26px;
   border-radius: 8px;
-  background: conic-gradient(from 210deg, #ffffff, #9aa6b6, #e8eef6, #78838f, #ffffff);
+  /* The real mark. `contain` rather than `cover` so the rounded square keeps its
+     own corners instead of being cropped square by the element's. */
+  background: url("/brand/mark.png") center / contain no-repeat;
   box-shadow: 0 0 22px -4px var(--glow);
   flex: 0 0 auto;
 }
