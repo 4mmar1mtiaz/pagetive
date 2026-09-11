@@ -26,6 +26,15 @@ const SCRIPT = `(function () {
   var variantId = el.getAttribute("data-variant") || null;
   if (!pageId) return;
 
+  /* The script is also embedded on pages this app did not serve, where a
+     relative "/api/track" would post to the customer's own origin and vanish.
+     The origin the script itself came from is the one that can receive it. */
+  var endpoint = "/api/track";
+  try {
+    var src = el.src || "";
+    if (src) endpoint = new URL(src).origin + "/api/track";
+  } catch (e) {}
+
   function cookie(name) {
     var m = document.cookie.match("(^|;)\\\\s*" + name + "\\\\s*=\\\\s*([^;]+)");
     return m ? m.pop() : "";
@@ -34,7 +43,10 @@ const SCRIPT = `(function () {
     return Math.random().toString(36).slice(2) + Date.now().toString(36);
   }
 
-  var visitorId = cookie("alp_vid") || "anon";
+  /* On an embedded page there is no first-party cookie, but the host usually
+     knows who this is — one preview per recipient, for instance — so it can
+     name the visitor outright. */
+  var visitorId = el.getAttribute("data-visitor") || cookie("alp_vid") || "anon";
   var sessionId = "";
   try {
     sessionId = sessionStorage.getItem("alp_sid") || "";
@@ -52,10 +64,14 @@ const SCRIPT = `(function () {
     queue = [];
     try {
       if (useBeacon && navigator.sendBeacon) {
-        navigator.sendBeacon("/api/track", new Blob([payload], { type: "application/json" }));
+        /* text/plain is CORS-safelisted. application/json would force a
+           preflight, which sendBeacon cannot perform, so the send would be
+           dropped on every embedded page. The endpoint parses the body as
+           JSON regardless of the declared type. */
+        navigator.sendBeacon(endpoint, new Blob([payload], { type: "text/plain;charset=UTF-8" }));
       } else {
-        fetch("/api/track", {
-          method: "POST", headers: { "content-type": "application/json" },
+        fetch(endpoint, {
+          method: "POST", headers: { "content-type": "text/plain;charset=UTF-8" },
           body: payload, keepalive: true
         }).catch(function () {});
       }
