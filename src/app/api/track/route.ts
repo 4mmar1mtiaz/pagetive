@@ -16,20 +16,6 @@ import { clientIp, rateLimit } from "@/lib/ratelimit";
 
 export const dynamic = "force-dynamic";
 
-/* The tracker is embedded on pages this app does not serve, so every response
-   here has to be readable cross-origin. Nothing is returned but a 204, so there
-   is nothing to protect: allow any origin and keep the endpoint write-only. */
-const CORS = {
-  "access-control-allow-origin": "*",
-  "access-control-allow-methods": "POST, OPTIONS",
-  "access-control-allow-headers": "content-type",
-  "access-control-max-age": "86400",
-};
-
-export async function OPTIONS() {
-  return new Response(null, { status: 204, headers: CORS });
-}
-
 type Incoming = {
   pageId?: string;
   variantId?: string | null;
@@ -52,25 +38,25 @@ export async function POST(req: Request) {
   try {
     body = (await req.json()) as Incoming;
   } catch {
-    return new Response(null, { status: 204, headers: CORS });
+    return new Response(null, { status: 204 });
   }
 
   // Generous — a real session sends a handful of batches — but it stops a
   // script inflating impressions, which would quietly skew every conversion
   // rate on the page downward.
   if (!rateLimit(`track:${clientIp(req)}`, 60, 60 * 1000).ok) {
-    return new Response(null, { status: 204, headers: CORS });
+    return new Response(null, { status: 204 });
   }
 
   const { pageId, sessionId } = body;
   const visitorId = body.visitorId || "anon";
   if (!pageId || !sessionId || !Array.isArray(body.events) || body.events.length === 0) {
-    return new Response(null, { status: 204, headers: CORS });
+    return new Response(null, { status: 204 });
   }
 
   try {
     const page = await prisma.page.findUnique({ where: { id: pageId }, select: { id: true } });
-    if (!page) return new Response(null, { status: 204, headers: CORS });
+    if (!page) return new Response(null, { status: 204 });
 
     const variantId = body.variantId || null;
     const rows = body.events
@@ -91,7 +77,7 @@ export async function POST(req: Request) {
         meta: toJson(e.meta ?? {}),
       }));
 
-    if (rows.length === 0) return new Response(null, { status: 204, headers: CORS });
+    if (rows.length === 0) return new Response(null, { status: 204 });
 
     const hasView = rows.some((r) => r.type === "view");
     if (hasView && variantId) {
@@ -110,8 +96,8 @@ export async function POST(req: Request) {
   } catch {
     // Deliberately silent. Losing an event is acceptable; breaking a live
     // landing page because analytics had a bad minute is not.
-    return new Response(null, { status: 204, headers: CORS });
+    return new Response(null, { status: 204 });
   }
 
-  return new Response(null, { status: 204, headers: CORS });
+  return new Response(null, { status: 204 });
 }
