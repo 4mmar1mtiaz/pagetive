@@ -1,5 +1,5 @@
 import { structured } from "@/lib/llm";
-import { BLOCK_REFERENCE, normalizeBlocks, type Block } from "@/lib/blocks";
+import { BLOCK_REFERENCE, isGoalBlock, normalizeBlocks, type Block } from "@/lib/blocks";
 
 /**
  * A second pass over generated copy.
@@ -61,8 +61,23 @@ export function lintBlocks(blocks: Block[]): string[] {
     }
   }
 
-  const hasPath = blocks.some((b) => b.type === "form" || b.type === "calendar");
-  if (!hasPath) findings.push("The page has no form and no calendar, so there is no way to convert.");
+  // Somebody else's form is still a form. A page built around an embedded
+  // Typeform or Cal.com widget has a conversion path and must not be told to
+  // bolt a second one on underneath it.
+  const hasPath = blocks.some(isGoalBlock);
+  if (!hasPath) {
+    findings.push(
+      "The page has no form, no calendar and no embedded form, so there is no way to convert.",
+    );
+  }
+
+  for (const b of blocks) {
+    if (b.type === "embed" && !b.embedUrl) findings.push(`${b.id}: is an embed block with no embedUrl.`);
+    if (b.mediaUrl && !b.mediaKind) findings.push(`${b.id}: has mediaUrl but no mediaKind. Set "image" or "video".`);
+    if ((b.mediaUrl || b.imageUrl) && b.mediaKind !== "video" && !b.alt) {
+      findings.push(`${b.id}: has a picture with no alt text. Say what it shows.`);
+    }
+  }
 
   return findings;
 }
@@ -94,7 +109,14 @@ Your job, in priority order:
 
 Constraints: keep the same block ids and the same block types. Do not add or
 remove blocks except to fix a grid count. Do not lengthen the page. If the copy
-is already strong, return it unchanged and say so, with changed set to false.`,
+is already strong, return it unchanged and say so, with changed set to false.
+
+You are editing words. Layout is not yours: carry bgImageUrl, bgVideoUrl,
+bgColor, bgOverlay, bgFocus, bgFixed, bgSlice, panel, placement, sticky,
+layout, imageUrl, mediaUrl, mediaKind, mediaFit, mediaHeight, embedUrl,
+embedKind, height, poster, autoplay, loop, muted, controls and links through
+exactly as they reached you, on the blocks they reached you on. Dropping one of those is not a tidier page, it is a picture the
+user chose disappearing without anybody being told.`,
     prompt: `Context for this page:
 ${args.context}
 

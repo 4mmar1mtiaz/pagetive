@@ -38,9 +38,19 @@ export async function generateMetadata({ params }: Props) {
   // the visitor sees a second later.
   let image: string | undefined;
   try {
-    const blocks = JSON.parse(page.blocks) as { imageUrl?: string; mediaUrl?: string; mediaKind?: string }[];
-    const withImage = blocks.find((b) => b.imageUrl || (b.mediaUrl && b.mediaKind !== "video"));
-    image = withImage?.imageUrl ?? withImage?.mediaUrl;
+    const blocks = JSON.parse(page.blocks) as {
+      imageUrl?: string;
+      mediaUrl?: string;
+      mediaKind?: string;
+      bgImageUrl?: string;
+    }[];
+    // A section background is just as much "what the visitor sees a second
+    // later" as a hero image is, and on a page built around one it is the only
+    // picture there is.
+    const withImage = blocks.find(
+      (b) => b.imageUrl || b.bgImageUrl || (b.mediaUrl && b.mediaKind !== "video"),
+    );
+    image = withImage?.imageUrl ?? withImage?.bgImageUrl ?? withImage?.mediaUrl;
   } catch {
     image = undefined;
   }

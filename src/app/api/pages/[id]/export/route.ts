@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db";
 import { parseJson } from "@/lib/json";
 import { LP_CSS } from "@/styles/lp-css";
-import { normalizeBlocks, type Block, type PageSettings } from "@/lib/blocks";
+import { normalizeBlocks, type Block, type PageSettings, type ThemeTokens } from "@/lib/blocks";
+import { HSCROLL } from "@/components/lp/Blocks";
 import { currentSession } from "@/lib/account";
 import { upgradeMessage } from "@/lib/plan";
 import { appUrl as resolvedAppUrl } from "@/lib/hosts";
@@ -49,6 +50,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const variant = variantId ? (page.variants.find((v) => v.id === variantId) ?? null) : null;
 
   const settings = parseJson<PageSettings>(page.settings, {});
+  const pageTheme = parseJson<ThemeTokens>(page.theme, {});
   const blocks = normalizeBlocks(parseJson<Block[]>(page.blocks, []));
   const origin = resolvedAppUrl();
 
@@ -118,6 +120,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 })();
 </script>`;
 
+  // A sideways page needs its wheel handler, and the slice above stopped at the
+  // first script tag by design. Same reason the form handler is rebuilt here:
+  // behaviour does not survive static markup, so the export carries its own
+  // copy of it. The source of that copy is the renderer, not a second version
+  // of the same five lines.
+  const scrollScript =
+    pageTheme.scroll === "left" || pageTheme.scroll === "right"
+      ? `\n<script>${HSCROLL}</script>`
+      : "";
+
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -129,7 +141,7 @@ ${page.goal ? `<meta name="description" content="${page.goal.replace(/["<>&]/g, 
 </head>
 <body style="margin:0">
 ${body}
-${formScript}
+${formScript}${scrollScript}
 </body>
 </html>`;
 

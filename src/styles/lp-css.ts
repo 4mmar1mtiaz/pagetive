@@ -101,7 +101,8 @@ export const LP_CSS = `/* Published landing page styling.
   pointer-events: none;
   background: radial-gradient(1200px 520px at 50% -10%, var(--lp-shade), transparent 70%);
 }
-.lp .hero > * { position: relative; z-index: 1; }
+.lp .hero.has-bg-image::after { display: none; }
+.lp .hero > *:not(.lp-scrim, .lp-bgvideo) { position: relative; z-index: 1; }
 
 .lp .grid { display: grid; gap: 20px; }
 .lp .g2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
@@ -206,12 +207,315 @@ export const LP_CSS = `/* Published landing page styling.
 /* Uploaded media. Height is capped rather than fixed so a portrait phone photo
    and a 4K screenshot both sit inside the section instead of one of them
    taking over the page. */
-.lp .lp-media { display: block; width: 100%; max-width: 900px; max-height: 70vh; height: auto; margin: 32px auto 0; border-radius: var(--radius); object-fit: contain; }
-.lp .hero .lp-media { margin-top: 44px; }
-.lp .lp-caption { margin-top: 12px; font-size: .95rem; opacity: .7; }
+.lp .lp-media { display: block; width: 100%; max-width: 900px; max-height: 70vh; height: auto; margin: 0 auto; border-radius: var(--lp-radius); object-fit: contain; }
+.lp .lp-media.fit-cover { object-fit: cover; height: 100%; }
+.lp .lp-caption { margin: 12px 0 0; font-size: .95rem; opacity: .7; }
+
+/* ---------------------------------------------------------------------------
+ * Placement.
+ *
+ * Where a block's picture, video, embed or form goes. The block itself does not
+ * know: it renders its copy, and the placement wraps the two together. That is
+ * what makes "a photograph down the left of the features grid" a field rather
+ * than a new block type.
+ */
+.lp .fig { margin: 36px auto 0; max-width: var(--lp-maxw); }
+.lp .fig.fig-wide > .lp-media { max-width: none; max-height: 78vh; }
+/* Edge to edge: the section gives its own side padding back. */
+.lp .fig.fig-full { max-width: none; margin-left: -24px; margin-right: -24px; }
+.lp .fig.fig-full > .lp-media { max-width: none; max-height: none; border-radius: 0; }
+.lp .fig.fig-full > .lp-caption { padding: 0 24px; }
+/* A side menu has already taken that padding for itself. */
+.lp[data-menu="left"] .fig.fig-full, .lp[data-menu="right"] .fig.fig-full { margin-left: 0; margin-right: 0; }
+.lp .fig .form-card, .lp .fig .cal-frame { margin-left: auto; margin-right: auto; }
+
+.lp .split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: clamp(28px, 4vw, 56px);
+  align-items: center;
+  max-width: var(--lp-maxw);
+  margin: 0 auto;
+}
+.lp .split > .split-fig { min-width: 0; }
+.lp .split > .split-body { min-width: 0; }
+/* The copy is written first; "left" moves the figure across it. */
+.lp .split.to-left > .split-fig { order: -1; }
+.lp .split .lp-media { max-width: 100%; max-height: 70vh; }
+.lp .split .wrap, .lp .split .narrow { max-width: none; margin: 0; }
+.lp .split .form-card { max-width: none; margin: 0; }
+/* Half a page is a column, and a column reads left. Centred copy is a full
+ * width decision; carrying it into a split is how a heading ends up floating in
+ * the middle of nothing with a photograph next to it. */
+.lp .split > .split-body, .lp .split > .split-body .center { text-align: left; }
+.lp .split > .split-body .cta-row { justify-content: flex-start; }
+.lp .split > .split-body .lead { margin-left: 0; margin-right: 0; }
+.lp .split .grid { margin-top: 0 !important; }
+/* One column. Three cards in half a page is two columns and an orphan, which is
+ * the thing the grid rules exist to prevent. */
+.lp .split .grid { grid-template-columns: 1fr; }
+
+@media (max-width: 720px) {
+  /* One column, copy first. Nothing sits beside anything on a phone. */
+  .lp .split { grid-template-columns: 1fr; }
+  .lp .split.to-left > .split-fig { order: 0; }
+}
+
+/* A picture on a grid item: a screenshot above a feature, a face beside a
+ * quote, a logo in a row. All three were always in the block reference. */
+.lp .card .item-media {
+  display: block;
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  border-radius: calc(var(--lp-radius) * .6);
+  margin-bottom: 16px;
+}
+.lp .who { display: flex; align-items: center; gap: 10px; }
+.lp .who-face { width: 36px; height: 36px; border-radius: 999px; object-fit: cover; flex: 0 0 36px; }
+
+/* Video behind a section, and behind the whole page. Muted, looping, and
+ * underneath everything: it is a background, not a player. */
+.lp .lp-bgvideo, .lp .lp-pagevideo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  border: 0;
+}
+.lp .lp-pagevideo { position: fixed; z-index: -1; }
+.lp[data-page-bg="scroll"] .lp-pagevideo { position: absolute; }
+.lp section.has-bg-video { background: var(--lp-bg); }
+.lp .hero.has-bg-video::after { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* A looping video behind the copy is motion nobody asked for twice. */
+  .lp .lp-bgvideo, .lp .lp-pagevideo { display: none; }
+}
+
+/* ---------------------------------------------------------------------------
+ * Backgrounds.
+ *
+ * The image itself is an inline style, because its URL is the user's and cannot
+ * live in a stylesheet. Everything around it is a class, so a picture behaves
+ * the same way on every block that carries one.
+ *
+ * The scrim is a real element rather than a gradient on the section, because a
+ * section's background is already spoken for by the picture. It sits first in
+ * the section and is the only positioned child without a z-index, so the copy
+ * paints over it by document order.
+ */
+.lp .lp-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--lp-bg);
+  pointer-events: none;
+}
+.lp footer.has-bg, .lp .lp-menu.has-bg { position: relative; }
+.lp section.has-bg > *:not(.lp-scrim, .lp-bgvideo),
+.lp footer.has-bg > *:not(.lp-scrim, .lp-bgvideo),
+.lp .lp-menu.has-bg > *:not(.lp-scrim, .lp-bgvideo) { position: relative; }
+.lp section.has-bg-video > *:not(.lp-scrim, .lp-bgvideo) { position: relative; }
+.lp section.has-bg-image { color: var(--lp-text); }
+
+/* A glass panel. The content floats; the picture behind it stays readable as a
+ * picture, which is the whole point of asking for one. */
+.lp section.panel > .wrap,
+.lp section.panel > .narrow,
+.lp section.panel > .form-card,
+.lp[data-panels="1"] section > .wrap,
+.lp[data-panels="1"] section > .narrow,
+.lp[data-panels="1"] section > .form-card {
+  background: color-mix(in srgb, var(--lp-surface) 62%, transparent);
+  border: 1px solid var(--lp-shade);
+  border-radius: var(--lp-radius);
+  padding: clamp(24px, 4vw, 48px);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+}
+.lp section.panel > .form-card,
+.lp[data-panels="1"] section > .form-card { max-width: 620px; }
+
+/* Cards inside a glass panel would be glass on glass. */
+.lp[data-panels="1"] .card,
+.lp section.panel .card { background: color-mix(in srgb, var(--lp-surface) 70%, transparent); }
+
+/* One picture behind the entire page. Fixed by default: it is the thing the
+ * content is supposed to float over. */
+.lp[data-page-bg] { position: relative; isolation: isolate; }
+.lp[data-page-bg]::before,
+.lp[data-page-bg]::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.lp[data-page-bg]::before {
+  background-image: var(--lp-page-image);
+  background-size: cover;
+  background-position: center;
+}
+.lp[data-page-bg]::after { background: var(--lp-bg); opacity: var(--lp-page-scrim, 0); }
+.lp[data-page-bg="scroll"]::before,
+.lp[data-page-bg="scroll"]::after { position: absolute; }
+/* With a picture behind the whole page, the alternating surface would cover it
+ * up section by section. The page background wins; a section that was given its
+ * own picture or colour still wins over the page. */
+.lp[data-page-bg] section:not(.has-bg) { background: transparent; }
+.lp[data-page-bg] .hero::after { display: none; }
+
+/* ---------------------------------------------------------------------------
+ * The menu.
+ *
+ * Five placements, because a menu is one of the few things people have a real
+ * opinion about. Top and bottom are bars; left and right are boxes down the
+ * edge of the screen and the page reserves a gutter for them; inline simply
+ * renders where the block sits.
+ */
+.lp .lp-menu {
+  z-index: 40;
+  padding: 14px 24px;
+  background: color-mix(in srgb, var(--lp-bg) 78%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--lp-shade);
+  border-width: 0 0 1px;
+}
+.lp .menu-inner {
+  max-width: var(--lp-maxw);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.lp .menu-brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 650; text-decoration: none; }
+.lp .menu-logo { height: 28px; width: auto; display: block; }
+.lp .menu-links { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.lp .menu-links a { color: var(--lp-muted); text-decoration: none; font-size: .95rem; }
+.lp .menu-links a:hover { color: var(--lp-text); }
+.lp .menu-cta { margin-left: auto; padding: 10px 18px; font-size: .92rem; }
+
+.lp .lp-menu.at-top.sticky { position: sticky; top: 0; }
+.lp .lp-menu.at-bottom {
+  border-width: 1px 0 0;
+  order: 999;
+}
+.lp .lp-menu.at-bottom.sticky { position: sticky; bottom: 0; }
+
+.lp .lp-menu.at-left,
+.lp .lp-menu.at-right {
+  position: fixed;
+  top: 24px;
+  bottom: 24px;
+  width: 232px;
+  border-width: 1px;
+  border-radius: var(--lp-radius);
+  padding: 24px;
+  overflow-y: auto;
+}
+.lp .lp-menu.at-left { left: 24px; }
+.lp .lp-menu.at-right { right: 24px; }
+.lp .lp-menu.at-left .menu-inner,
+.lp .lp-menu.at-right .menu-inner { flex-direction: column; align-items: flex-start; gap: 18px; height: 100%; }
+.lp .lp-menu.at-left .menu-links,
+.lp .lp-menu.at-right .menu-links { flex-direction: column; align-items: flex-start; gap: 14px; }
+.lp .lp-menu.at-left .menu-cta,
+.lp .lp-menu.at-right .menu-cta { margin: auto 0 0; }
+
+/* The gutter a side menu needs. Without it the first column of every section
+ * sits under the menu, which looks like a rendering bug rather than a layout.
+ *
+ * On the sections rather than on the page, because in a sideways page the page
+ * is the scroll container: padding at its start is scrolled straight past the
+ * moment the first column snaps into place, and the menu lands on the
+ * headline. Padding each section survives the snap. */
+.lp[data-menu="left"] section,
+.lp[data-menu="left"] footer { padding-left: 288px; }
+.lp[data-menu="right"] section,
+.lp[data-menu="right"] footer { padding-right: 288px; }
+
+/* ---------------------------------------------------------------------------
+ * Sideways pages.
+ *
+ * Sections become columns. Each one is its own scroll container vertically, so
+ * a panel with more in it than fits still reads, and the row snaps so a column
+ * does not come to rest halfway off the screen.
+ */
+.lp[data-scroll="left"],
+.lp[data-scroll="right"] {
+  display: flex;
+  flex-direction: row;
+  height: 100vh;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  scroll-behavior: smooth;
+}
+.lp[data-scroll="right"] { flex-direction: row-reverse; }
+.lp[data-scroll="left"] > section,
+.lp[data-scroll="right"] > section,
+.lp[data-scroll="left"] > footer,
+.lp[data-scroll="right"] > footer {
+  flex: 0 0 auto;
+  width: min(100vw, 1100px);
+  height: 100vh;
+  overflow-y: auto;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+/* A menu in a sideways page is pinned, never a column of its own. */
+.lp[data-scroll="left"] > .lp-menu.at-top,
+.lp[data-scroll="right"] > .lp-menu.at-top { position: fixed; top: 0; left: 0; right: 0; }
+.lp[data-scroll="left"] > .lp-menu.at-bottom,
+.lp[data-scroll="right"] > .lp-menu.at-bottom { position: fixed; bottom: 0; left: 0; right: 0; }
+.lp[data-scroll="left"] > .lp-menu.at-inline,
+.lp[data-scroll="right"] > .lp-menu.at-inline { flex: 0 0 auto; align-self: flex-start; }
+
+@media (max-width: 900px) {
+  /* A fixed side menu on a phone is a wall. It becomes a bar at the top, and
+     the page stops reserving a gutter that no longer exists. */
+  .lp .lp-menu.at-left,
+  .lp .lp-menu.at-right {
+    position: static;
+    width: auto;
+    border-radius: 0;
+    border-width: 0 0 1px;
+    padding: 14px 18px;
+  }
+  .lp .lp-menu.at-left .menu-inner,
+  .lp .lp-menu.at-right .menu-inner { flex-direction: row; align-items: center; gap: 16px; }
+  .lp .lp-menu.at-left .menu-links,
+  .lp .lp-menu.at-right .menu-links { flex-direction: row; gap: 16px; }
+  .lp .lp-menu.at-left .menu-cta,
+  .lp .lp-menu.at-right .menu-cta { margin: 0 0 0 auto; }
+  .lp[data-menu="left"] section,
+  .lp[data-menu="left"] footer { padding-left: 24px; }
+  .lp[data-menu="right"] section,
+  .lp[data-menu="right"] footer { padding-right: 24px; }
+
+  /* Sideways reads badly in one hand. A narrow screen gets the ordinary page. */
+  .lp[data-scroll="left"],
+  .lp[data-scroll="right"] { display: block; height: auto; overflow: visible; }
+  .lp[data-scroll="left"] > section,
+  .lp[data-scroll="right"] > section,
+  .lp[data-scroll="left"] > footer,
+  .lp[data-scroll="right"] > footer { width: auto; height: auto; overflow: visible; display: block; }
+}
 
 @media (max-width: 640px) {
   .lp { --lp-pad: 56px; }
   .lp section { padding-left: 18px; padding-right: 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp[data-scroll="left"],
+  .lp[data-scroll="right"] { scroll-behavior: auto; }
+  .lp section.has-bg-image { background-attachment: scroll !important; }
 }
 `;

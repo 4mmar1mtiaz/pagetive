@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { parseJson, toJson } from "@/lib/json";
-import { normalizeBlocks, type Block } from "@/lib/blocks";
+import { normalizeBlocks, type Block, isGoalBlock } from "@/lib/blocks";
 import { choose, type Arm } from "@/lib/bandit";
 
 /**
@@ -76,7 +76,7 @@ export async function simulateTraffic(pageId: string, visitors: number, days = 1
   const blocks = normalizeBlocks(parseJson<Block[]>(page.blocks, []));
   if (blocks.length === 0) throw new Error("This page has no blocks.");
 
-  const conversionBlock = blocks.findIndex((b) => b.type === "form" || b.type === "calendar");
+  const conversionBlock = blocks.findIndex(isGoalBlock);
   const goalIndex = conversionBlock === -1 ? blocks.length - 1 : conversionBlock;
 
   // Hidden truth. 1.2% to 7.4%, control pinned mid-range so a generated variant

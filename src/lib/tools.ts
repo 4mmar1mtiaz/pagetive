@@ -103,7 +103,7 @@ export const TOOLS: Anthropic.Tool[] = [
           type: "object",
           additionalProperties: true,
           description:
-            "Optional theme tokens: mode (dark|light), accent, bg, surface, text, muted, radius, font, density. Ignored for anything brandUrl already supplied.",
+            "Optional theme tokens: mode (dark|light), accent, bg, surface, text, muted, radius, font, density. Also the page-level layout: bgImageUrl (one picture behind the whole page), bgOverlay, bgFixed, panels (content floats in glass panels), scroll (down | left | right). Colours are ignored for anything brandUrl already supplied; the layout tokens are not.",
         },
         settings: {
           type: "object",

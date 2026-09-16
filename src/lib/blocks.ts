@@ -13,6 +13,7 @@
  */
 
 export type BlockType =
+  | "menu"
   | "hero"
   | "logos"
   | "features"
@@ -26,6 +27,7 @@ export type BlockType =
   | "cta"
   | "richtext"
   | "media"
+  | "embed"
   | "footer";
 
 export type FormField = {
@@ -83,19 +85,96 @@ export type Block = {
   fields?: FormField[];
   submitText?: string;
   successMessage?: string;
-  /** calendar — any embeddable scheduler URL (Cal.com, Calendly, TidyCal, ...) */
+  /**
+   * Any embeddable URL: a scheduler, a form somebody built elsewhere, a map, a
+   * video host, a dashboard. On a calendar block this is the scheduler and a
+   * blank falls back to the page's default one; on an embed block it is
+   * whatever the user wants in the page.
+   */
   embedUrl?: string;
   height?: number;
+  /**
+   * What the embed is, when it is not obvious from the URL. The only one that
+   * changes behaviour is "form": a page whose conversion path is somebody
+   * else's form still has a conversion path, and the checker needs to know.
+   */
+  embedKind?: "form" | "calendar" | "video" | "map" | "other";
   /** media — an uploaded image or video, and anywhere else one is shown */
   mediaUrl?: string;
   mediaKind?: "image" | "video";
+  /** Video playback. Muted is forced whenever autoplay is on; browsers require it. */
+  autoplay?: boolean;
+  loop?: boolean;
+  muted?: boolean;
+  controls?: boolean;
+  /** The still shown before a video plays. */
+  poster?: string;
+  /** "contain" shows the whole picture. "cover" fills the space and crops. */
+  mediaFit?: "contain" | "cover";
+  /** Cap on how tall the picture, video or embed is allowed to be, in pixels. */
+  mediaHeight?: number;
+  /**
+   * Where the block's picture, video, embed or form sits relative to its copy.
+   *
+   * Every block takes one, not just the media blocks: a features grid with a
+   * photograph down its left side is a normal thing to want, and there is no
+   * reason the block vocabulary should be the thing standing in the way.
+   *
+   *   stack  under the copy (the default)
+   *   left   beside the copy, on the left
+   *   right  beside the copy, on the right
+   *   wide   under the copy, the full width of the content column
+   *   full   under the copy, edge to edge of the screen
+   */
+  layout?: "stack" | "left" | "right" | "wide" | "full";
+  /** A video playing behind this section, in place of a background picture. */
+  bgVideoUrl?: string;
   /** Describes the image for screen readers and for search. Never decorative text. */
   alt?: string;
   caption?: string;
   /** hero / cta / richtext: a single image beside or beneath the copy */
   imageUrl?: string;
-  /** footer */
+  /** footer and menu */
   links?: { label?: string; href?: string }[];
+  /**
+   * Menu placement. A menu is allowed anywhere the user asks for it: pinned to
+   * the top, pinned to the bottom, standing in a box down the left or right, or
+   * sitting in the flow of the page where the block happens to be. "top" is the
+   * default only because a page whose owner said nothing about a menu should
+   * still look like a page.
+   */
+  placement?: "top" | "bottom" | "left" | "right" | "inline";
+  /** A top or bottom menu that stays with the visitor as they scroll. */
+  sticky?: boolean;
+
+  /**
+   * Section background.
+   *
+   * Any block can carry its own picture or its own colour behind it, and two
+   * neighbouring blocks can carry different ones. The image is a background,
+   * not content: it is cropped to the section and never stretched, so `alt`
+   * does not apply to it. Anything a screen reader needs to know belongs in a
+   * media or hero image instead.
+   */
+  bgImageUrl?: string;
+  bgColor?: string;
+  /** 0 to 1. A scrim between the picture and the copy. Text over a photo needs one. */
+  bgOverlay?: number;
+  /** Which part of the picture survives the crop. Default center. */
+  bgFocus?: "center" | "top" | "bottom" | "left" | "right";
+  /** The picture holds still while the content scrolls over it. */
+  bgFixed?: boolean;
+  /** The content of this block sits in a translucent panel over its background. */
+  panel?: boolean;
+  /**
+   * One picture deliberately split across several blocks.
+   *
+   * Off by default and it should stay off: blocks are reordered by variants and
+   * by the optimiser, and the halves of a split picture do not travel together.
+   * It exists because a user who has been told that and still wants it is
+   * entitled to have it.
+   */
+  bgSlice?: { part?: number; of?: number };
 };
 
 export type ThemeTokens = {
@@ -109,6 +188,31 @@ export type ThemeTokens = {
   radius?: number;
   font?: string;
   density?: "tight" | "normal" | "roomy";
+
+  /**
+   * One picture behind the whole page, rather than one per section.
+   *
+   * This is the other legitimate way to use a photograph, and the only safe way
+   * to get continuity: the image belongs to the page, so reordering sections
+   * cannot break it. A page-level background sits under every block that does
+   * not set its own.
+   */
+  bgImageUrl?: string;
+  /** A video behind the whole page instead of a picture. Muted and looping. */
+  bgVideoUrl?: string;
+  bgOverlay?: number;
+  bgFixed?: boolean;
+  /** Every section's content sits in a translucent glass panel over that picture. */
+  panels?: boolean;
+  /**
+   * Which way the page travels as the visitor scrolls.
+   *
+   * "down" is an ordinary page. "left" lays the sections out in a row and the
+   * page moves sideways, the normal reading direction. "right" is the same
+   * thing mirrored. Sideways is a real request and not a mistake to be talked
+   * out of; it is a default only in the sense that nobody gets it by accident.
+   */
+  scroll?: "down" | "left" | "right";
 };
 
 export type PageSettings = {
@@ -143,10 +247,30 @@ export const DEFAULT_THEME: Required<ThemeTokens> = {
   radius: 16,
   font: "Inter",
   density: "normal",
+  bgImageUrl: "",
+  bgVideoUrl: "",
+  bgOverlay: 0,
+  bgFixed: false,
+  panels: false,
+  scroll: "down",
 };
 
 export function theme(t: ThemeTokens | undefined): Required<ThemeTokens> {
   return { ...DEFAULT_THEME, ...(t ?? {}) };
+}
+
+/**
+ * The block a visitor has to reach for the page to have worked.
+ *
+ * Shared because three places ask the question and they must agree: the funnel
+ * labels a step with it, the simulator decides where a fake visitor converts,
+ * and the copy checker refuses a page that has none. An embedded form or
+ * scheduler counts. A page whose whole conversion path is somebody else's
+ * Typeform is not a page without a conversion path.
+ */
+export function isGoalBlock(b: Block): boolean {
+  if (b.type === "form" || b.type === "calendar") return true;
+  return Boolean(b.embedUrl) && (b.embedKind === "form" || b.embedKind === "calendar");
 }
 
 /** Stable, human-readable block ids — variants reference them by name. */
@@ -184,6 +308,8 @@ export function applyOverrides(blocks: Block[], overrides: Overrides): Block[] {
  */
 export const BLOCK_REFERENCE = `A page is a JSON array of blocks. Each block is an object with a "type" and the fields listed for that type. Omit fields you do not need. Never emit HTML.
 
+menu      - links[{label, href}], ctaText, ctaHref, imageUrl (a logo), headline (a
+            wordmark when there is no logo), placement, sticky
 hero      - eyebrow, headline, subhead, ctaText, ctaHref, secondaryCtaText, secondaryCtaHref, ctaNote, align, imageUrl, alt
 logos     - headline, items[{name, imageUrl}]
 features  - eyebrow, headline, subhead, items[{title, body, imageUrl}]
@@ -198,7 +324,95 @@ calendar  - headline, subhead, embedUrl, height   (embedUrl blank falls back to 
 cta       - headline, subhead, ctaText, ctaHref, ctaNote
 richtext  - headline, body   (body may use plain line breaks, no markup)
 media     - headline, subhead, mediaUrl, mediaKind ("image" or "video"), alt, caption
+embed     - headline, subhead, embedUrl, embedKind, height, caption
+            anything that lives in an iframe: a form built somewhere else, a
+            map, a video host, a booking widget, a dashboard. embedKind is
+            form | calendar | video | map | other.
 footer    - body, links[{label, href}]
+
+MEDIA AND PLACEMENT. Every block above accepts a picture, a video or an embed,
+and a layout saying where it goes. Not just the media blocks. A features grid
+with a photograph down its left side, a pricing table with a demo video under it,
+an FAQ next to a map: all of these are one field, and you should use them.
+
+  imageUrl    a picture on this block
+  mediaUrl    a picture or a video, with mediaKind "image" or "video"
+  embedUrl    an iframe on this block, with embedKind
+  layout      stack (under the copy, the default) | left | right (beside the
+              copy) | wide (full content width) | full (edge to edge)
+  mediaFit    contain shows the whole picture, cover fills the space and crops
+  mediaHeight a cap in pixels, when the default is the wrong size
+  alt         what the picture shows, always, for anything that is content
+  caption     a line under it
+  autoplay, loop, muted, controls, poster   video playback. Autoplay forces
+              muted, because every browser does. A video that matters gets
+              controls; a video that is decoration gets autoplay, loop, muted.
+
+Grid items take pictures too: features items[{imageUrl}] renders it above the
+title, proof items[{imageUrl}] renders it as the reviewer's face, logos
+items[{imageUrl}] is the logo itself.
+
+EMBEDS. Anything with an embeddable URL goes on the page, wherever they want it.
+Somebody else's form, a Cal.com or Calendly booking widget, a Google Map, a
+YouTube or Loom or Vimeo video, a Typeform, a spreadsheet, a dashboard. Use an
+embed block for it, or put embedUrl on any other block to place it beside that
+block's copy. Set embedKind, and set height when the thing has an obvious one.
+An embed whose embedKind is "form" or "calendar" counts as the page's conversion
+path, so a page built around somebody else's form does not need a second one.
+
+BACKGROUNDS. Every block above also accepts these, and you may use them without
+asking. A page of flat panels is not more professional than a page with pictures
+in it; it is just emptier.
+
+  bgImageUrl  a picture behind this section, cropped to fill it
+  bgColor     a colour behind this section, instead of the alternating surface
+  bgOverlay   0 to 1, a scrim between the picture and the copy
+  bgFocus     center | top | bottom | left | right, what survives the crop
+  bgFixed     true holds the picture still while the content scrolls over it
+  bgVideoUrl  a video behind this section instead of a picture, muted and looping
+  panel       true puts this section's content in a translucent glass panel
+  bgSlice     {part, of} - one picture split across several blocks. See below.
+
+Sections are independent: different sections can carry different pictures, and
+that is the normal way to use them. Text over a photograph needs bgOverlay,
+usually around 0.5. A headline nobody can read is a broken page.
+
+THE CONTINUITY RULE. Never split one picture across two blocks or two columns so
+that it reads as a single continuous image. Blocks get reordered: a variant can
+rewrite them, the optimiser serves different orders to different people, and the
+user drags them around later. The two halves do not travel together, so the
+picture comes apart and nobody is watching when it does. Want one image spanning
+the whole page? Put it on the theme as bgImageUrl. It belongs to the page, so
+nothing can pull it apart.
+
+If the user asks for a sliced image anyway, tell them that once, in one sentence,
+and offer the page background instead. If they ask again, build it with bgSlice:
+the same bgImageUrl on each block, {part: 1, of: 2} then {part: 2, of: 2}, in
+order. Do not argue twice. It is their page.
+
+THE PAGE ITSELF. These are theme tokens, not block fields, and they are how a
+page stops looking like every other page:
+
+  bgImageUrl  one picture behind the entire page
+  bgVideoUrl  a video behind the entire page instead
+  bgOverlay   the scrim over it
+  bgFixed     true keeps it still while everything scrolls over it
+  panels      true floats every section in a glass panel over that picture
+  scroll      "down" (ordinary), "left" (sideways, the usual direction), or
+              "right" (sideways, mirrored)
+
+MENUS. A menu block is allowed, and it goes where the user asked. placement is
+"top", "bottom", "left", "right", or "inline" (wherever the block sits in the
+order). Top and bottom menus take sticky. Left and right menus stand in a fixed
+box down that edge of the screen, and the page makes room for them.
+
+When the user said nothing about a menu, the default is: a menu block first,
+placement "top", sticky true, three to five links pointing at sections that
+actually exist on the page, and one CTA pointing at the conversion path. Every
+section is an anchor named after its block id, so the links are "#features-1",
+"#pricing-1", "#faq-1", and the conversion path is always "#form" or
+"#calendar". Never link to a section the page does not have. When the user did say, what they said wins over
+every default here and you build it as described without talking them out of it.
 
 LINKING TO THE APP. "/sign-up" and "/sign-in" are real routes. Use them as
 ctaHref whenever the action is "start using this product" rather than "send us
@@ -229,8 +443,9 @@ HARD RULES. These are not style preferences; a page that breaks one is wrong.
 4. NO SMART QUOTES OR SPECIAL CHARACTERS in copy. Straight apostrophes only.
    No arrows, no bullets, no typographic ornaments.
 
-5. Every page needs exactly one conversion path: a form block, a calendar block,
-   or both. Every CTA above it points at it ("#form" or "#calendar").
+5. Every page needs a conversion path: a form block, a calendar block, or an
+   embed block whose embedKind is "form" or "calendar". Every CTA above it
+   points at it ("#form", "#calendar", or that embed block's id).
 
 6. NEVER INVENT FACTS. No statistics, customer names, review counts, prices,
    certifications, guarantees, response times, or years in business unless they

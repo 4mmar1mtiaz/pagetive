@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { parseJson } from "@/lib/json";
-import { normalizeBlocks, type Block } from "@/lib/blocks";
+import { normalizeBlocks, type Block, isGoalBlock } from "@/lib/blocks";
 import { EXPLORE_MIN, winProbabilities, type Arm } from "@/lib/bandit";
 
 /**
@@ -156,7 +156,7 @@ export async function pageReport(
   if (!page) throw new Error("Page not found");
 
   const blocks = normalizeBlocks(parseJson<Block[]>(page.blocks, []));
-  const goalBlock = blocks.find((b) => b.type === "form" || b.type === "calendar");
+  const goalBlock = blocks.find(isGoalBlock);
 
   const where = {
     pageId,
@@ -294,7 +294,10 @@ export async function pageReport(
     ...(goalBlock
       ? [
           {
-            step: goalBlock.type === "calendar" ? "Saw the booker" : "Saw the form",
+            step:
+              goalBlock.type === "calendar" || goalBlock.embedKind === "calendar"
+                ? "Saw the booker"
+                : "Saw the form",
             explain: "The conversion block entered their screen",
             set: reachedGoal,
           },
