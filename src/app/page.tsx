@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { currentSession } from "@/lib/account";
-import { servePage } from "@/lib/serve";
+import { servePage, slugForHost } from "@/lib/serve";
 import { LP_CSS } from "@/styles/lp-css";
 import { LandingPage } from "@/components/lp/Blocks";
 import { Workspace } from "@/components/Workspace";
@@ -31,6 +32,23 @@ export const dynamic = "force-dynamic";
  */
 const MARKETING_SLUG = process.env.MARKETING_SLUG?.trim() || "";
 
+/**
+ * The page attached to the hostname this request arrived on, if there is one.
+ *
+ * The proxy already routes a customer hostname to /h/{host}, but only for a
+ * hostname it does not recognise as the app's own. When the same domain is both
+ * the app's address and a published page's address, the rewrite never happens
+ * and the request lands here instead — where, with no MARKETING_SLUG set, a
+ * live page that the database says belongs to this exact hostname was being
+ * answered with a redirect to a sign-in form. The domain panel attached it. It
+ * should be served.
+ */
+async function slugForThisHost(): Promise<string | null> {
+  const host = (await headers()).get("host");
+  if (!host) return null;
+  return slugForHost(host);
+}
+
 export default async function Home({
   searchParams,
 }: {
@@ -43,17 +61,23 @@ export default async function Home({
 
   if (!session.anonymous) return <Workspace clerkOn={clerkOn} />;
 
-  // No marketing page configured: this domain is the app, so the front door is
-  // the way in. Sign-in rather than sign-up because the widget links to the
-  // other one and a returning user is the likelier visitor to a bare root.
-  if (!MARKETING_SLUG) redirect("/sign-in");
+  // MARKETING_SLUG is the explicit answer. A page attached to this hostname is
+  // the implicit one, and it is the more specific of the two: somebody pointed
+  // this exact domain at this exact page on purpose.
+  const slug = (await slugForThisHost()) ?? MARKETING_SLUG;
+
+  // Nothing configured and nothing attached: this domain is the app, so the
+  // front door is the way in. Sign-in rather than sign-up because the widget
+  // links to the other one and a returning user is the likelier visitor to a
+  // bare root.
+  if (!slug) redirect("/sign-in");
 
   const sp = await searchParams;
-  const served = await servePage({ slug: MARKETING_SLUG, searchParams: sp });
+  const served = await servePage({ slug, searchParams: sp });
   const githubUrl = process.env.GITHUB_URL?.trim() || null;
 
-  // Configured but not servable — wrong slug, or still a draft. Same answer as
-  // no page at all: send them somewhere that works instead of explaining a
+  // Named but not servable — wrong slug, or still a draft. Same answer as
+  // nothing at all: send them somewhere that works instead of explaining a
   // configuration problem to a stranger.
   if (!served) redirect("/sign-in");
 
