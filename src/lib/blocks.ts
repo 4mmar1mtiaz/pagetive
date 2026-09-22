@@ -344,6 +344,9 @@ an FAQ next to a map: all of these are one field, and you should use them.
   mediaHeight a cap in pixels, when the default is the wrong size
   alt         what the picture shows, always, for anything that is content
   caption     a line under it
+  ctaText, ctaHref   a button at the end of the section, on any block type.
+              Hero and cta blocks place it under their copy; everything else
+              puts it after its items. One per section is plenty.
   autoplay, loop, muted, controls, poster   video playback. Autoplay forces
               muted, because every browser does. A video that matters gets
               controls; a video that is decoration gets autoplay, loop, muted.

@@ -210,6 +210,21 @@ function Cta({ block }: { block: Block }) {
   );
 }
 
+/**
+ * A section's own button, for the block types whose layout has no natural slot
+ * for one. Lets a page put a call to action at the end of every section, which
+ * is what a long page for a cold audience needs: whoever is convinced by the
+ * third section should not have to scroll back up to act on it.
+ */
+function SectionCta({ block }: { block: Block }) {
+  if (!block.ctaText) return null;
+  return (
+    <div className="block-cta">
+      <Cta block={block} />
+    </div>
+  );
+}
+
 function Heading({ block }: { block: Block }) {
   return (
     <>
@@ -311,6 +326,7 @@ function Body({
         <section className={alt} {...attrs}>
           <div className={`wrap ${block.align === "left" ? "" : "center"}`}>
             <Heading block={block} />
+            <SectionCta block={block} />
           </div>
         </section>
       );
@@ -330,6 +346,7 @@ function Body({
                 ),
               )}
             </div>
+            <SectionCta block={block} />
           </div>
         </section>
       );
@@ -357,6 +374,7 @@ function Body({
                 </div>
               ))}
             </div>
+            <SectionCta block={block} />
           </div>
         </section>
       );
@@ -377,6 +395,7 @@ function Body({
                 </div>
               ))}
             </div>
+            <SectionCta block={block} />
           </div>
         </section>
       );
@@ -398,6 +417,7 @@ function Body({
                 </div>
               ))}
             </div>
+            <SectionCta block={block} />
           </div>
         </section>
       );
@@ -426,6 +446,7 @@ function Body({
                 </div>
               ))}
             </div>
+            <SectionCta block={block} />
           </div>
         </section>
       );
@@ -472,6 +493,7 @@ function Body({
                 </details>
               ))}
             </div>
+            <SectionCta block={block} />
           </div>
         </section>
       );
@@ -513,6 +535,7 @@ function Body({
             {paragraphs(block.body ?? "").map((p, i) => (
               <p key={i}>{p}</p>
             ))}
+            <SectionCta block={block} />
           </div>
         </section>
       );

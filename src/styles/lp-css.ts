@@ -91,6 +91,8 @@ export const LP_CSS = `/* Published landing page styling.
 
 .lp .center { text-align: center; }
 .lp .center .cta-row { justify-content: center; }
+.lp .block-cta { margin-top: 32px; }
+.lp .wrap.center .block-cta .cta-row, .lp .narrow .block-cta .cta-row { justify-content: center; }
 .lp .center .lead { margin-left: auto; margin-right: auto; }
 
 .lp .hero { padding-top: calc(var(--lp-pad) * 1.3); }
