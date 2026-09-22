@@ -40,6 +40,8 @@ export function Rail({
   const [frameKey, setFrameKey] = useState(0);
   /** Which variant the preview is pinned to. Null means "let the optimizer pick". */
   const [previewVariant, setPreviewVariant] = useState<string | null>(null);
+  /** Frame width only — the page itself is the same, so no remount is needed. */
+  const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const [simming, setSimming] = useState(false);
   const [domains, setDomains] = useState<
     { id: string; hostname: string; verified: boolean; note: string | null; plan: { records: { type: string; name: string; value: string }[]; explain: string; ready: boolean } }[]
@@ -287,43 +289,53 @@ export function Rail({
 
       {tab === "preview" ? (
         <>
-          {variants.length > 1 ? (
-            <div
-              style={{
-                display: "flex",
-                gap: 6,
-                alignItems: "center",
-                flexWrap: "wrap",
-                padding: "10px 12px",
-                borderBottom: "1px solid var(--line)",
-              }}
-            >
-              <span className="sm">Showing:</span>
-              <div className="tabs">
-                <button
-                  className={`tab ${pinned ? "" : "active"}`}
-                  onClick={() => setPreviewVariant(null)}
-                  title="Whatever the optimizer would serve a real visitor"
-                >
-                  auto
+          <div
+            style={{
+              display: "flex",
+              gap: 6,
+              alignItems: "center",
+              flexWrap: "wrap",
+              padding: "10px 12px",
+              borderBottom: "1px solid var(--line)",
+            }}
+          >
+            <div className="tabs">
+              {(["desktop", "mobile"] as const).map((d) => (
+                <button key={d} className={`tab ${device === d ? "active" : ""}`} onClick={() => setDevice(d)}>
+                  {d}
                 </button>
-                {variants.map((v) => (
-                  <button
-                    key={v.id}
-                    className={`tab ${pinned === v.id ? "active" : ""}`}
-                    onClick={() => setPreviewVariant(v.id)}
-                    title={v.angle || v.name}
-                  >
-                    {v.name}
-                  </button>
-                ))}
-              </div>
+              ))}
             </div>
-          ) : null}
-          <div className="frame-wrap" style={{ flex: 1 }}>
+            {variants.length > 1 ? (
+              <>
+                <span className="sm" style={{ marginLeft: 6 }}>Showing:</span>
+                <div className="tabs">
+                  <button
+                    className={`tab ${pinned ? "" : "active"}`}
+                    onClick={() => setPreviewVariant(null)}
+                    title="Whatever the optimizer would serve a real visitor"
+                  >
+                    auto
+                  </button>
+                  {variants.map((v) => (
+                    <button
+                      key={v.id}
+                      className={`tab ${pinned === v.id ? "active" : ""}`}
+                      onClick={() => setPreviewVariant(v.id)}
+                      title={v.angle || v.name}
+                    >
+                      {v.name}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null}
+          </div>
+          <div className={`frame-wrap ${device === "mobile" ? "mobile" : ""}`} style={{ flex: 1 }}>
             <iframe key={`${frameKey}:${pinned ?? "auto"}`} src={previewSrc} title="Preview" />
           </div>
           <div
+            className="rail-actions"
             style={{
               display: "flex",
               gap: 8,

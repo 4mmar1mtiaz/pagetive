@@ -20,11 +20,11 @@ export default async function AdminPage() {
 
   return (
     <div style={{ maxWidth: 1240, margin: "0 auto", padding: "22px 20px 90px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 22 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 22, flexWrap: "wrap" }}>
         <Link className="btn sm ghost" href="/">
           ← Workspace
         </Link>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
           <div style={{ fontSize: 19, fontWeight: 600, letterSpacing: "-0.02em" }}>Accounts</div>
           <div className="sm">Everyone using this install, what they use, and what they cost.</div>
         </div>

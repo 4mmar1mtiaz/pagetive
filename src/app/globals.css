@@ -100,13 +100,71 @@ button { font: inherit; color: inherit; }
 }
 .app.no-side { grid-template-columns: 268px 1fr; }
 
+/* The section switcher only exists where the three columns stop fitting. */
+.mobile-bar { display: none; }
+
+/* Tablet: sidebar stays, and chat and preview share the second column. */
 @media (max-width: 1180px) {
-  .app { grid-template-columns: 240px 1fr; }
+  .app { grid-template-columns: 240px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .mobile-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    grid-column: 1 / -1;
+    padding: 6px 8px;
+    border-radius: 14px;
+  }
+  .mobile-bar .mark {
+    width: 24px; height: 24px; border-radius: 7px; flex: none;
+    background: url("/brand/mark.png") center / contain no-repeat;
+  }
+  .mobile-bar .tabs { flex: 1; justify-content: flex-end; }
+  .mobile-bar .only-phone { display: none; }
   .app .rail { display: none; }
+  .app.view-page .rail { display: flex; }
+  .app.view-page .main { display: none; }
 }
+
+/* Phone: one panel at a time, full width. */
 @media (max-width: 820px) {
-  .app { grid-template-columns: 1fr; }
-  .app .sidebar { display: none; }
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
+  }
+  .mobile-bar .only-phone { display: inline-block; }
+  .mobile-bar .tabs { justify-content: space-between; }
+  .mobile-bar .tab { flex: 1; padding: 8px 10px; font-size: 13px; }
+  .app .sidebar,
+  .app .main,
+  .app .rail { display: none; }
+  .app.view-pages .sidebar,
+  .app.view-chat .main,
+  .app.view-page .rail { display: flex; }
+
+  .thread { padding: 18px 14px 8px; }
+  .composer { padding: 10px 12px 12px; }
+  .composer .field { padding: 8px 8px 8px 12px; gap: 6px; }
+  /* 16px stops iOS Safari zooming the page on focus. */
+  .composer textarea,
+  .field-row input,
+  .field-row select { font-size: 16px; }
+  .composer .btn { padding: 8px 10px; }
+  .hint { display: none; }
+  .empty-hero { padding: 3vh 0 0; }
+  .empty-hero h1 { font-size: 24px; }
+  .chat-head { padding: 12px 14px; }
+  .rail-head { flex-wrap: wrap; }
+  .rail-actions { flex-wrap: wrap; }
+  .rail-actions > span:nth-child(2) { flex-basis: 40%; }
+  .item { padding: 11px 10px; }
+  .media-backdrop { padding: 10px; }
+  .media-dialog { max-height: 92dvh; }
+  .media-foot { flex-wrap: wrap; }
+  .attached-chip { max-width: 100%; }
 }
 
 .col {
@@ -345,6 +403,13 @@ button { font: inherit; color: inherit; }
   position: relative;
 }
 .frame-wrap iframe { width: 100%; height: 100%; border: 0; display: block; }
+/* Phone-width preview: a 390px frame centred in the panel, so the page's own
+   breakpoints fire exactly as they would on a real phone. */
+.frame-wrap.mobile { display: flex; justify-content: center; padding: 16px 0; overflow: auto; }
+.frame-wrap.mobile iframe {
+  width: 390px; max-width: 100%; height: 100%; min-height: 0;
+  border: 1px solid var(--line); border-radius: 18px; background: #fff;
+}
 
 .device {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;

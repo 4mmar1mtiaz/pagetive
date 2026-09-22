@@ -41,6 +41,10 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
   // as an account with nothing in it rather than as an account still loading.
   const [loadingLists, setLoadingLists] = useState(true);
   const [loadingThread, setLoadingThread] = useState(false);
+  // Phone and tablet widths cannot fit three columns, so one panel shows at a
+  // time and a tab bar switches between them. Desktop ignores this entirely:
+  // the CSS only reads it below the breakpoints.
+  const [mobileView, setMobileView] = useState<"pages" | "chat" | "page">("chat");
 
   // Only the very first load picks a page. Every later refresh must leave the
   // selection alone: "New page" deliberately clears it, and re-selecting on the
@@ -92,6 +96,7 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
    * just want a clean thread to do it in.
    */
   function newChat() {
+    setMobileView("chat");
     setChatId(null);
     setTurns([]);
     setTurnCost(null);
@@ -106,6 +111,7 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
    * empty and the agent is told to build rather than edit.
    */
   function newPage() {
+    setMobileView("chat");
     setChatId(null);
     setTurns([]);
     setTurnCost(null);
@@ -122,6 +128,7 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
    */
   function selectPage(id: string) {
     setActivePageId(id);
+    setMobileView("chat");
     const thread = chats.find((c) => c.pageId === id);
     if (thread) {
       openChat(thread.id, thread.title);
@@ -269,7 +276,29 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
   const activePage = pages.find((p) => p.id === activePageId) ?? null;
 
   return (
-    <div className="app">
+    <div className={`app view-${mobileView}`}>
+      <nav className="mobile-bar glass" aria-label="Workspace sections">
+        <div className="mark" />
+        <div className="tabs">
+          {(
+            [
+              ["pages", "Pages"],
+              ["chat", "Chat"],
+              ["page", "Preview"],
+            ] as const
+          ).map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              className={`tab ${mobileView === v ? "active" : ""} ${v === "pages" ? "only-phone" : ""}`}
+              onClick={() => setMobileView(v)}
+              aria-pressed={mobileView === v}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </nav>
       <aside className="glass col sidebar">
         <div className="brand">
           <div className="mark" />
@@ -361,6 +390,7 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
               onClick={() => {
                 openChat(c.id, c.title);
                 setActivePageId(c.pageId);
+                setMobileView("chat");
               }}
             >
               <div className="truncate">{c.title}</div>
@@ -405,7 +435,7 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
       ) : null}
       </aside>
 
-      <main className="col">
+      <main className="col main">
         {showKeyPanel ? (
           <div style={{ padding: "0 0 4px" }}>
             <KeyPanel
