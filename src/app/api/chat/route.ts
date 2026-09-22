@@ -24,6 +24,45 @@ import { appUrl as resolvedAppUrl } from "@/lib/hosts";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+/**
+ * What went wrong, in words a person can act on.
+ *
+ * Anthropic's errors arrive as "400 {json}", which told a user whose credits ran
+ * out nothing except that something broke. The SDK error carries the status and
+ * the API's own message, which is enough to say which of the few real causes it
+ * was and whose key it concerns.
+ */
+function explain(err: unknown, ownKey: boolean): { message: string; needsKey: boolean } {
+  const e = err as { status?: number; message?: string; error?: { error?: { message?: string } } };
+  const detail = (e.error?.error?.message ?? e.message ?? "").toLowerCase();
+  const whose = ownKey ? "your Anthropic key" : "the built-in key";
+
+  if (detail.includes("credit balance")) {
+    return {
+      needsKey: true,
+      message: ownKey
+        ? "Your Anthropic account is out of credit, so nothing could be generated. Add credit at console.anthropic.com (Plans & Billing) and send your message again."
+        : "The built-in AI allowance is out of credit right now. Add your own Anthropic key below and carry on; your pages are untouched.",
+    };
+  }
+  if (e.status === 401 || detail.includes("api key is invalid") || detail.includes("invalid x-api-key")) {
+    return {
+      needsKey: true,
+      message: `Anthropic did not accept ${whose}. It may have been revoked or pasted incompletely. Paste a fresh key from console.anthropic.com below.`,
+    };
+  }
+  if (e.status === 403) {
+    return { needsKey: true, message: `${ownKey ? "Your key" : "The built-in key"} is not allowed to use this model. Check its permissions at console.anthropic.com, or paste a different key below.` };
+  }
+  if (e.status === 429) {
+    return { needsKey: false, message: "Anthropic is rate-limiting this key for a moment. Wait a minute and send it again." };
+  }
+  if (e.status === 529 || (e.status ?? 0) >= 500) {
+    return { needsKey: false, message: "Anthropic's servers are busy right now. Nothing was lost; send your message again in a minute." };
+  }
+  return { needsKey: false, message: e.message || "Something went wrong writing that. Send it again." };
+}
+
 /** A page build is 2-4 tool calls; anything past this is a loop, not work. */
 const MAX_TURNS = 14;
 
@@ -245,7 +284,10 @@ export async function POST(req: Request) {
           freeRemaining: key.own ? null : Math.max(0, (key.remaining ?? 0) - 1),
         });
       } catch (err) {
-        send({ type: "error", message: (err as Error).message });
+        const told = explain(err, key.own);
+        // A key or billing problem is fixed in the key panel, so it opens the
+        // panel with the explanation rather than printing a red line.
+        send(told.needsKey ? { type: "needs_key", message: told.message } : { type: "error", message: told.message });
       } finally {
         controller.close();
       }

@@ -88,6 +88,11 @@ function Figure({
   block: Block;
   ctx: { pageId: string; variantId: string | null; settings: PageSettings };
 }) {
+  // A menu's imageUrl is its logo, already drawn at logo size inside the bar.
+  // Treating it as a figure as well drew the logo a second time at full width
+  // under a sticky menu, covering the page.
+  if (block.type === "menu") return null;
+
   const cap: React.CSSProperties = block.mediaHeight ? { maxHeight: block.mediaHeight } : {};
   const fit = block.mediaFit === "cover" ? " fit-cover" : "";
 
