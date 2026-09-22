@@ -1,5 +1,33 @@
 import { structured } from "@/lib/llm";
 import { BLOCK_REFERENCE, normalizeBlocks, type Block, type ThemeTokens } from "@/lib/blocks";
+import { readPage, readTheme, type ScrapedImage } from "@/lib/scrape";
+
+/** A browser user-agent. Some hosts serve a bot-flavoured shell otherwise. */
+const UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36";
+
+/**
+ * The page's real stylesheets, not just whatever CSS happened to be inline.
+ *
+ * One page measured here linked forty-eight of them, which is why reading the
+ * accent out of the markup alone found nothing on most sites. Capped hard: this
+ * runs inside a request, and a theme is not worth a timeout.
+ */
+async function styles(html: string, urls: string[]): Promise<string> {
+  const inline = html.match(/<style[^>]*>([\s\S]*?)<\/style>/gi)?.join("\n") ?? "";
+  const fetched = await Promise.all(
+    urls.slice(0, 3).map(async (u) => {
+      try {
+        const res = await fetch(u, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(4000) });
+        if (!res.ok) return "";
+        return (await res.text()).slice(0, 400000);
+      } catch {
+        return "";
+      }
+    }),
+  );
+  return [inline, ...fetched].join("\n");
+}
 
 /**
  * Turning somebody else's live page into our block model.
@@ -17,80 +45,11 @@ import { BLOCK_REFERENCE, normalizeBlocks, type Block, type ThemeTokens } from "
  * offer is not.
  */
 
-const MAX_CHARS = 60000;
-
-function stripTags(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
-    .replace(/<svg[\s\S]*?<\/svg>/gi, " ")
-    .replace(/<!--[\s\S]*?-->/g, " ");
-}
-
-function decode(text: string): string {
-  return text
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#0?39;|&apos;|&rsquo;/g, "'")
-    .replace(/&mdash;/g, "-")
-    .replace(/&[a-z]+;/gi, " ");
-}
-
-/** Visible text, in order, with the tag that produced it kept as a hint. */
-function outline(html: string): string {
-  const body = stripTags(html);
-  const lines: string[] = [];
-  const re = /<(h1|h2|h3|h4|p|li|a|button|blockquote|label|span|td|summary)[^>]*>([\s\S]*?)<\/\1>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(body)) !== null) {
-    const tag = m[1].toLowerCase();
-    const text = decode(m[2].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
-    if (!text || text.length > 600) continue;
-    // Nav crumbs and one-word spans add noise without adding meaning.
-    if (text.length < 2) continue;
-    if (tag === "span" && text.length < 12) continue;
-    lines.push(`[${tag}] ${text}`);
-  }
-  // Consecutive duplicates come from wrapper elements repeating their child's text.
-  const deduped = lines.filter((l, i) => l !== lines[i - 1]);
-  return deduped.join("\n").slice(0, MAX_CHARS);
-}
-
-function meta(html: string, name: string): string {
-  const re = new RegExp(`<meta[^>]+(?:name|property)=["']${name}["'][^>]*content=["']([^"']*)["']`, "i");
-  const m = html.match(re);
-  if (m) return decode(m[1]).trim();
-  const re2 = new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]*(?:name|property)=["']${name}["']`, "i");
-  const m2 = html.match(re2);
-  return m2 ? decode(m2[1]).trim() : "";
-}
-
-/** The most-used non-neutral hex in the stylesheet is nearly always the brand accent. */
-function guessAccent(html: string): string | undefined {
-  const counts: Record<string, number> = {};
-  const re = /#([0-9a-f]{6})\b/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) !== null) {
-    const hex = `#${m[1].toLowerCase()}`;
-    const r = parseInt(m[1].slice(0, 2), 16);
-    const g = parseInt(m[1].slice(2, 4), 16);
-    const b = parseInt(m[1].slice(4, 6), 16);
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    // Skip greys, near-blacks and near-whites: they are chrome, not brand.
-    if (max - min < 40) continue;
-    if (max < 40 || min > 220) continue;
-    counts[hex] = (counts[hex] ?? 0) + 1;
-  }
-  const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  return ranked[0]?.[0];
-}
-
 export type ImportResult = {
+  /** Where the page ended up after redirects. */
+  url: string;
+  /** Every picture the page carried, for the caller to copy into storage. */
+  images: ScrapedImage[];
   name: string;
   goal: string;
   blocks: Block[];
@@ -140,13 +99,7 @@ export async function importPage(
   }
 
   const res = await fetch(target.toString(), {
-    headers: {
-      // Some hosts serve a bot-flavoured page to unrecognised agents, which
-      // imports as an empty shell. Ask for the human version.
-      "user-agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
-      accept: "text/html,application/xhtml+xml",
-    },
+    headers: { "user-agent": UA, accept: "text/html,application/xhtml+xml" },
     redirect: "follow",
   }).catch((err: Error) => {
     throw new Error(`Could not reach ${target.hostname}: ${err.message}`);
@@ -155,37 +108,70 @@ export async function importPage(
   if (!res.ok) throw new Error(`${target.hostname} returned HTTP ${res.status}.`);
 
   const html = await res.text();
-  const text = outline(html);
+  // The base is the URL after redirects: a relative image on a page that moved
+  // resolves against where it ended up, not where it was asked for.
+  const page = readPage(html, res.url || target.toString());
 
-  if (text.length < 200) {
+  if (page.outline.length < 200) {
     throw new Error(
-      `${target.hostname} returned almost no readable text. It is probably rendered entirely in JavaScript — paste the copy in chat instead and I will build the page from that.`,
+      `${target.hostname} returned almost no readable text. It is probably rendered entirely in JavaScript. Paste the copy in chat instead and I will build the page from that.`,
     );
   }
 
-  const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "").trim();
-  const accent = guessAccent(html);
+  const theme = readTheme(await styles(html, page.cssUrls));
 
   const result = await structured<{ name: string; goal: string; notes: string; blocksJson: string }>({
     system: `You convert an existing landing page into a structured block model.
 
 ${BLOCK_REFERENCE}
 
-You are reading a text outline of the page in document order. Tags in brackets are the source element. Your job is reconstruction, not redesign:
-- Keep the owner's actual copy wherever it is usable. Do not rewrite their offer, their prices, or their claims.
-- Drop site navigation, cookie banners, legal boilerplate and blog chrome. Keep the selling content.
-- If the source has a form, recreate its fields. If it has a booking widget, emit a calendar block.
-- If the source is missing an obvious conversion path, add a form block with name/email/phone and say so in notes.
-- Do not invent testimonials, logos, statistics or guarantees that are not in the source.
+You are reading the page in document order. Each line is one thing found on it,
+labelled with what produced it:
+
+  [h1] [h2] [p] [li] [button] [blockquote] ...   copy, from that element
+  [img] URL alt="..." WxH                        a picture, where it appeared
+  [video] URL                                    a video
+  [embed] URL                                    an iframe: a booker, a form, a map
+  [link] text -> URL                             a link or button and its target
+  [field] name= type= placeholder= required      one input in a form
+  [nav:...] [footer:...] [aside:...]             inside site chrome
+  [consent:...]                                  a cookie or consent dialog
+
+Your job is reconstruction, not redesign:
+- Keep the owner's actual copy wherever it is usable. Do not rewrite their
+  offer, their prices, or their claims.
+- KEEP THEIR PICTURES. An [img] line tells you a picture was at that point in
+  the page, so put it on the block you build from the copy around it: use the
+  URL exactly as given, as imageUrl or mediaUrl, with layout saying where it
+  sat. Alt text comes from the alt in the line. A page imported without its
+  images does not look like the page they asked you to import. Skip only
+  obvious chrome: icons under 64px, and anything inside [nav:] or [footer:].
+- A row of small images inside [nav:] or near words like "trusted by" is a
+  logos block, one item per image.
+- REBUILD THEIR FORM from the [field] lines: same names, same types, same
+  required flags, in the same order. Do not substitute a generic name/email/
+  phone form for a form that asked for six things.
+- An [embed] pointing at a scheduler is a calendar block. Any other [embed]
+  that is part of the offer is an embed block with that URL and an embedKind.
+- [link] targets are the real CTA hrefs. A button that pointed at their signup
+  keeps pointing there. Only send a CTA to "#form" if you built the form.
+- Drop [nav:], [footer:], [consent:] and legal boilerplate. Keep the selling
+  content.
+- If the source has no conversion path at all, add a form block with name,
+  email and phone, and say so in notes.
+- Do not invent testimonials, logos, statistics or guarantees that are not in
+  the source.
 
 Return blocksJson as a JSON string containing the block array.`,
-    prompt: `URL: ${target.toString()}
-Title: ${title}
-Meta description: ${meta(html, "description") || "(none)"}
-OG title: ${meta(html, "og:title") || "(none)"}
-
-Page outline:
-${text}`,
+    prompt: `URL: ${res.url || target.toString()}
+Title: ${page.title || "(none)"}
+Meta description: ${page.description || "(none)"}
+OG title: ${page.ogTitle || "(none)"}
+OG image: ${page.ogImage || "(none)"}
+Detected theme: ${JSON.stringify(theme)}
+${page.dropped.length ? `Skipped during extraction: ${page.dropped.join(", ")}\n` : ""}
+Page:
+${page.outline}`,
     schema: IMPORT_SCHEMA as unknown as Record<string, unknown>,
     kind: "import",
     accountId,
@@ -201,10 +187,14 @@ ${text}`,
   }
 
   return {
-    name: result.name || title || target.hostname,
+    url: res.url || target.toString(),
+    images: page.ogImage
+      ? [{ url: page.ogImage, alt: "", w: 0, h: 0, region: "", context: "", logoHint: false, background: false }, ...page.images]
+      : page.images,
+    name: result.name || page.title || target.hostname,
     goal: result.goal ?? "",
     notes: result.notes ?? "",
     blocks,
-    theme: accent ? { accent } : {},
+    theme,
   };
 }

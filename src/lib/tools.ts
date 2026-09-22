@@ -18,6 +18,7 @@ import { EXPLORE_MIN } from "@/lib/bandit";
 import { clearSimulation, simulateTraffic } from "@/lib/simulate";
 import { dnsPlan, verifyDomain } from "@/lib/domains";
 import { readBrand } from "@/lib/brand";
+import { collectSiteImages, swapUrls } from "@/lib/site-images";
 import { appUrl, wildcardRoot } from "@/lib/hosts";
 import { lintBlocks, reviewCopy } from "@/lib/copyreview";
 import { upgradeMessage, type Entitlements } from "@/lib/plan";
@@ -76,7 +77,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "read_brand",
     description:
-      "Read a company's website and extract its real palette, typeface, light/dark register and self-description. Call this BEFORE building a page whenever you know their domain. It is what stops a generated page looking nothing like the business it belongs to.",
+      "Read a company's website: its real palette, typeface and light/dark register, what the business says it does (home page plus up to two inner pages), its contact details, and its own pictures, measured and sorted into logo, hero, photo and thumbnail. Call this BEFORE building a page whenever you know their domain. It is what stops a generated page looking nothing like the business it belongs to.",
     input_schema: {
       type: "object",
       properties: { url: { type: "string", description: "Their main website, e.g. acme.com" } },
@@ -430,7 +431,7 @@ export async function runTool(
       }
 
       case "read_brand": {
-        const brand = await readBrand(String(input.url));
+        const brand = await readBrand(String(input.url), { accountId: ctx.accountId });
         return {
           siteName: brand.siteName,
           theyDescribeThemselvesAs: brand.description,
@@ -438,7 +439,22 @@ export async function runTool(
           fonts: brand.fonts,
           theme: brand.theme,
           brief: brand.brief,
-          note: "Pass this url as brandUrl on create_page and the theme is applied for you. Use the brief to match their register; do not describe the colours in the copy.",
+          contact: { phones: brand.phones ?? [], emails: brand.emails ?? [] },
+          images: (brand.images ?? []).map((i) => ({
+            url: i.url,
+            role: i.role,
+            size: `${i.w}x${i.h}`,
+            orientation: i.orientation,
+            backgroundOk: i.backgroundOk,
+            ...(i.alt ? { alt: i.alt } : {}),
+            ...(i.context ? { shownUnder: i.context } : {}),
+          })),
+          whatTheirSiteSays: brand.details ?? "",
+          note:
+            "Pass this url as brandUrl on create_page and the theme is applied for you. Use the brief to match their register; do not describe the colours in the copy. " +
+            "whatTheirSiteSays is their own copy: take their services, specifics and wording from it, and treat any fact in it (prices, years, guarantees, reviews) as stated by them. " +
+            "USE THEIR IMAGES, placed by role (see 'Using pictures from their website' in your brief). Use the url exactly as given. " +
+            (brand.images?.length ? "" : "No usable pictures were found on their site; build without images rather than inventing URLs."),
         };
       }
 
@@ -549,6 +565,23 @@ export async function runTool(
         const blocked = await pageQuotaError(ctx);
         if (blocked) return blocked;
         const result = await importPage(String(input.url), ctx.accountId, ctx.apiKey);
+        // Their pictures, copied into our storage so the page does not hotlink them.
+        let pictures = 0;
+        try {
+          const found = await collectSiteImages({
+            images: result.images,
+            icons: [],
+            ogImage: "",
+            host: new URL(result.url).hostname.replace(/^www\./, ""),
+            accountId: ctx.accountId,
+          });
+          const stored = new Map(found.filter((f) => f.url !== f.source).map((f) => [f.source, f.url]));
+          result.blocks = swapUrls(result.blocks, stored);
+          result.theme = swapUrls(result.theme, stored);
+          pictures = stored.size;
+        } catch {
+          /* the page still renders from their URLs */
+        }
         const page = await prisma.page.create({
           data: {
             name: result.name,
@@ -571,6 +604,7 @@ export async function runTool(
           name: page.name,
           blockIds: result.blocks.map((b) => b.id),
           importNotes: result.notes,
+          picturesCopied: pictures,
           note: "Imported as a draft. Review the notes — imports lose layout and sometimes lose the offer.",
         };
       }

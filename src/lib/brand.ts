@@ -1,4 +1,6 @@
 import type { ThemeTokens } from "@/lib/blocks";
+import { readPage, type Scraped } from "@/lib/scrape";
+import { collectSiteImages, type SiteImage } from "@/lib/site-images";
 
 /**
  * Read a brand off its own website.
@@ -107,9 +109,49 @@ export type Brand = {
   brief: string;
   palette: string[];
   fonts: string[];
+  /** Only when asked for with `site`: what the business says, and its pictures. */
+  details?: string;
+  phones?: string[];
+  emails?: string[];
+  images?: SiteImage[];
 };
 
-export async function readBrand(rawUrl: string): Promise<Brand> {
+/** Pages beyond the home page that usually say what a business does and show it. */
+const WORTH_READING = /about|service|what-we-do|our-work|work|portfolio|gallery|projects|team|products?|solutions|menu/i;
+
+/** Selling copy only: headings, paragraphs, list items. Chrome and markup lines are dropped. */
+function copyOf(page: Scraped, max: number): string {
+  return page.outline
+    .split("\n")
+    .filter((l) => /^\[(h\d|p|li|blockquote|text|dt|dd|td|figcaption|summary|button)\]/.test(l))
+    .join("\n")
+    .slice(0, max);
+}
+
+async function fetchHtml(url: string): Promise<{ html: string; url: string } | null> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
+        accept: "text/html,application/xhtml+xml",
+      },
+      redirect: "follow",
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok || !(res.headers.get("content-type") ?? "").includes("html")) return null;
+    return { html: await res.text(), url: res.url || url };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param site Also read what the business says about itself and collect its
+ *   pictures, from the home page and up to two inner pages. `accountId` owns the
+ *   stored copies of those pictures; without it they are linked, not copied.
+ */
+export async function readBrand(rawUrl: string, site?: { accountId?: string }): Promise<Brand> {
   let target: URL;
   try {
     target = new URL(rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`);
@@ -201,7 +243,43 @@ export async function readBrand(rawUrl: string): Promise<Brand> {
     .filter(Boolean)
     .join(" ");
 
+  let extra: Pick<Brand, "details" | "phones" | "emails" | "images"> = {};
+  if (site) {
+    const home = readPage(html, res.url || target.toString());
+    const inner = [
+      ...new Map(
+        home.pages
+          .filter((p) => WORTH_READING.test(`${p.text} ${new URL(p.url).pathname}`))
+          .map((p) => [p.url.split("#")[0].replace(/\/$/, ""), p] as const),
+      ).values(),
+    ]
+      .filter((p) => p.url.replace(/\/$/, "") !== (res.url || target.toString()).replace(/\/$/, ""))
+      .slice(0, 2);
+    const others = (await Promise.all(inner.map((p) => fetchHtml(p.url))))
+      .filter((r): r is { html: string; url: string } => r !== null)
+      .map((r) => ({ url: r.url, page: readPage(r.html, r.url) }));
+
+    const images = await collectSiteImages({
+      images: [...home.images, ...others.flatMap((o) => o.page.images)],
+      icons: home.icons,
+      ogImage: home.ogImage,
+      host: target.hostname.replace(/^www\./, ""),
+      accountId: site.accountId,
+    });
+
+    extra = {
+      details: [
+        `Home page (${res.url || target.toString()}):\n${copyOf(home, 5000)}`,
+        ...others.map((o) => `${o.url}:\n${copyOf(o.page, 2500)}`),
+      ].join("\n\n"),
+      phones: [...new Set([home, ...others.map((o) => o.page)].flatMap((p) => p.phones))].slice(0, 3),
+      emails: [...new Set([home, ...others.map((o) => o.page)].flatMap((p) => p.emails))].slice(0, 3),
+      images,
+    };
+  }
+
   return {
+    ...extra,
     url: target.toString(),
     siteName,
     description,
