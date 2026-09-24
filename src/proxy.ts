@@ -50,6 +50,10 @@ const isPublic = createRouteMatcher([
   "/api/lead",
   "/api/health",
   "/api/webhooks/(.*)",
+  // The agent API. Callers have no Clerk session; every route under it checks
+  // its own bearer key (src/lib/agent-api.ts) before doing anything.
+  "/api/v1",
+  "/api/v1/(.*)",
   "/sign-in(.*)",
   "/sign-up(.*)",
   // Crawler and social-scraper surface. These have no session and never will,
