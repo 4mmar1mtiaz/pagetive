@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PRODUCT_NAME } from "@/lib/brand-name";
+import { AgentKeys } from "@/components/AgentKeys";
 
 /**
  * Where somebody puts their own Anthropic key.
@@ -125,6 +126,9 @@ export function KeyPanel({
         Get one at console.anthropic.com. It is stored on this server, used only for your own pages, and never
         shown back to you or to anyone else. Leave the box empty and save to remove it.
       </p>
+
+      {/* Not in the out-of-messages banner, which is about one thing. */}
+      {message ? null : <AgentKeys />}
     </div>
   );
 }

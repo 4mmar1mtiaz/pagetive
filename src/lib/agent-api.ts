@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { entitlements, type Entitlements } from "@/lib/plan";
 import { appUrl } from "@/lib/hosts";
@@ -11,15 +11,21 @@ import { appUrl } from "@/lib/hosts";
  * agent uses. There is no sign-in on that path, so the bearer token IS the
  * account: whoever holds it can build, edit and publish pages as that account.
  *
- * Configured by environment rather than a table on purpose. It is one operator
- * handing one key to their own agents; a deploy is the right amount of friction
- * for minting or revoking it, and it needs no migration.
+ * Two kinds of key are accepted, checked in this order:
  *
- *   AGENT_API_KEY     the bearer token. Comma-separate to allow several, so a
- *                     key can be rotated without a window where nothing works.
- *   AGENT_ACCOUNT_ID  the Account.id every call acts as.
+ *   1. The operator's environment key, as before. One key (or a comma list, for
+ *      rotation) that acts as one fixed account:
  *
- * Either one missing disables the whole API.
+ *        AGENT_API_KEY     the bearer token(s).
+ *        AGENT_ACCOUNT_ID  the Account.id every call with it acts as.
+ *
+ *      Checked first and without touching the ApiKey table, so it keeps working
+ *      exactly as it did even on a database the ApiKey migration has not
+ *      reached yet. Either value missing just switches this path off.
+ *
+ *   2. An account's own key, made from the settings panel. `pgt_` plus 64 hex
+ *      characters, stored only as a sha256 and looked up by it. It acts as the
+ *      account that made it, until that account revokes it.
  */
 
 export type AgentAuth =
@@ -40,35 +46,79 @@ function sameSecret(a: string, b: string): boolean {
   return timingSafeEqual(ha, hb);
 }
 
+/** What an account key looks like. Anything else is never looked up. */
+const ACCOUNT_KEY = /^pgt_[0-9a-f]{64}$/;
+
+/** What is stored for a key, and what a presented key is looked up by. */
+export function hashAgentKey(key: string): string {
+  return createHash("sha256").update(key).digest("hex");
+}
+
+/**
+ * A fresh account key: 32 bytes of real randomness, hex encoded. The caller
+ * stores `hash` and `prefix` and shows `key` to the user once.
+ */
+export function newAgentKey(): { key: string; hash: string; prefix: string } {
+  const key = `pgt_${randomBytes(32).toString("hex")}`;
+  return { key, hash: hashAgentKey(key), prefix: key.slice(0, 12) };
+}
+
+/** Whether the operator's environment key is set. Account keys need no setup. */
 export function agentApiEnabled(): boolean {
   return configuredKeys().length > 0 && Boolean(process.env.AGENT_ACCOUNT_ID?.trim());
 }
 
-export async function authenticateAgent(req: Request): Promise<AgentAuth> {
-  const keys = configuredKeys();
-  const accountId = process.env.AGENT_ACCOUNT_ID?.trim();
-  if (!keys.length || !accountId) {
-    return { ok: false, status: 503, error: "The agent API is not configured on this server." };
-  }
-
-  const header = req.headers.get("authorization") ?? "";
-  const presented = header.replace(/^Bearer\s+/i, "").trim() || req.headers.get("x-api-key")?.trim() || "";
-  // Every key is compared, not just until the first match, so timing does not
-  // reveal which of several keys was close.
-  const match = presented ? keys.map((k) => sameSecret(presented, k)).some(Boolean) : false;
-  if (!match) return { ok: false, status: 401, error: "Unauthorized" };
-
-  const account = await prisma.account.findUnique({ where: { id: accountId } });
-  if (!account) return { ok: false, status: 503, error: "AGENT_ACCOUNT_ID does not name an account." };
+function authed(account: { id: string; plan: string; maxPages: number | null; suspended: boolean }): AgentAuth {
   if (account.suspended) {
     return { ok: false, status: 403, error: "This account is suspended. Its pages are untouched." };
   }
-
   return {
     ok: true,
     accountId: account.id,
     ents: entitlements(account.plan, { override: account.maxPages, suspended: account.suspended }),
   };
+}
+
+export async function authenticateAgent(req: Request): Promise<AgentAuth> {
+  const header = req.headers.get("authorization") ?? "";
+  const presented = header.replace(/^Bearer\s+/i, "").trim() || req.headers.get("x-api-key")?.trim() || "";
+  if (!presented) return { ok: false, status: 401, error: "Unauthorized" };
+
+  // 1. The operator's environment key. Every key is compared, not just until
+  // the first match, so timing does not reveal which of several keys was close.
+  const keys = configuredKeys();
+  const accountId = process.env.AGENT_ACCOUNT_ID?.trim();
+  if (keys.length && accountId && keys.map((k) => sameSecret(presented, k)).some(Boolean)) {
+    const account = await prisma.account.findUnique({ where: { id: accountId } });
+    if (!account) return { ok: false, status: 503, error: "AGENT_ACCOUNT_ID does not name an account." };
+    return authed(account);
+  }
+
+  // 2. An account's own key. The lookup is by hash, so the stored value never
+  // has to be compared against the presented one at all.
+  if (!ACCOUNT_KEY.test(presented)) return { ok: false, status: 401, error: "Unauthorized" };
+
+  let row;
+  try {
+    row = await prisma.apiKey.findUnique({
+      where: { keyHash: hashAgentKey(presented) },
+      include: { account: true },
+    });
+  } catch {
+    // The table not existing yet (migration not applied) must read as a bad
+    // key, not a crash, so nothing about path 1 depends on it.
+    return { ok: false, status: 401, error: "Unauthorized" };
+  }
+  if (!row || row.revokedAt) return { ok: false, status: 401, error: "Unauthorized" };
+
+  const result = authed(row.account);
+  if (result.ok) {
+    // Best effort: a failed timestamp write is no reason to refuse the call.
+    await prisma.apiKey
+      .update({ where: { id: row.id }, data: { lastUsedAt: new Date() } })
+      .catch(() => undefined);
+  }
+  return result;
 }
 
 /**

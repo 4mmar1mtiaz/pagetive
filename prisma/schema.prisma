@@ -284,9 +284,35 @@ model Account {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  pages  Page[]
-  chats  Chat[]
-  grants PageGrant[]
+  pages   Page[]
+  chats   Chat[]
+  grants  PageGrant[]
+  apiKeys ApiKey[]
+}
+
+/// A key an external agent uses to act as this account over /api/v1.
+///
+/// Only a sha256 of the key is stored. The key is shown once, when it is made,
+/// and never again: a table of live credentials is the one thing a database
+/// leak should not hand over. Lookup is by that hash, so it is unique and the
+/// index is the whole lookup. `prefix` is the first few characters, kept so a
+/// person can tell their keys apart in a list without the key being readable.
+///
+/// `revokedAt` rather than a delete, for the same reason as Share: "was this
+/// key live last Tuesday" is worth being able to answer.
+model ApiKey {
+  id         String    @id @default(cuid())
+  accountId  String
+  name       String
+  keyHash    String    @unique /// sha256 hex of the full key
+  prefix     String /// "pgt_1a2b3c4d", for telling keys apart
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
 }
 
 /// A link that shows one page and its report to somebody with no account.

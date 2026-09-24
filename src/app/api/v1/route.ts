@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     usage: {
       call: `POST ${base}/api/v1/tools/{name} with the tool's input as the JSON body`,
-      auth: "Authorization: Bearer <AGENT_API_KEY>",
+      auth: "Authorization: Bearer <your API key> (or x-api-key: <your API key>)",
       result:
         "200 with the tool's result object on success. A tool that refuses (bad id, plan limit, bad input) returns 422 with { error } - read it and adjust, as the chat agent would.",
       flow: "read_brand on their website -> create_page with the full block array and brandUrl -> review previewUrl -> publish_page when told to.",

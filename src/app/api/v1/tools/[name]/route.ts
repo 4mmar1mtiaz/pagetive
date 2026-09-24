@@ -5,7 +5,7 @@ import { rateLimit } from "@/lib/ratelimit";
 import { absolutize, authenticateAgent, GENERATING_TOOLS } from "@/lib/agent-api";
 
 /**
- * Run one builder tool as the configured account.
+ * Run one builder tool as the account the presented key belongs to.
  *
  * This is the chat agent's tool layer (src/lib/tools.ts) exposed over HTTP, not
  * a second implementation of it. Ownership scoping, plan limits and input
