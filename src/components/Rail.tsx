@@ -5,6 +5,8 @@ import type { PageAnalytics } from "@/lib/analytics";
 import type { PageRow, PlanState } from "@/components/types";
 import { Spinner } from "@/components/Spinner";
 import { SharePanel } from "@/components/SharePanel";
+import { PRODUCT_NAME } from "@/lib/brand-name";
+import type { NudgeKey } from "@/lib/nudges";
 
 /**
  * The right-hand rail: the page as it actually looks, the numbers it is
@@ -21,16 +23,29 @@ function pct(n: number): string {
   return `${(n * 100).toFixed(n >= 0.1 ? 0 : 1)}%`;
 }
 
+/** What the chat is asked when a next-step card's button is pressed. Worded as
+ *  the user would say it, because it lands in their transcript as theirs. */
+const ASK_VARIANTS = "Make 3 variants of this page on different angles so it A/B tests itself.";
+
 export function Rail({
   page,
   plan,
   onChanged,
   refreshKey,
+  onAsk,
+  onStart,
+  onOpenKeys,
 }: {
   page: PageRow | null;
   plan: PlanState | null;
   onChanged: () => void;
   refreshKey: number;
+  /** Sends a message to the chat, as if typed. */
+  onAsk: (text: string) => void;
+  /** Starts a new page in the chat. */
+  onStart: () => void;
+  /** Opens the account panel, where agent API keys live. */
+  onOpenKeys: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("preview");
   const [stats, setStats] = useState<PageAnalytics | null>(null);
@@ -57,7 +72,38 @@ export function Rail({
   const [verifying, setVerifying] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
 
+  // Which next-step cards this account has closed, and whether it uses the
+  // agent API yet. Null until /api/account answers, and no card shows before
+  // then: a card that appears and then vanishes is worse than none.
+  const [account, setAccount] = useState<{ dismissed: NudgeKey[]; agentKeys: number } | null>(null);
+  // The page whose settings are loaded. Settings from the previous page must
+  // not decide whether this one gets the integrations card.
+  const [settingsFor, setSettingsFor] = useState<string | null>(null);
+  // The API card is hidden once its button has opened the key panel. The key
+  // count is only read on load, so without this the card would still be
+  // asking after the key was made.
+  const [keysOpened, setKeysOpened] = useState(false);
+
   const pageId = page?.id ?? null;
+
+  useEffect(() => {
+    fetch("/api/account")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.error) return;
+        setAccount({ dismissed: d.dismissed ?? [], agentKeys: d.agentKeys ?? 0 });
+      })
+      .catch(() => undefined);
+  }, []);
+
+  function dismiss(key: NudgeKey) {
+    setAccount((a) => (a ? { ...a, dismissed: [...a.dismissed, key] } : a));
+    fetch("/api/account", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dismiss: key }),
+    }).catch(() => undefined);
+  }
 
   // Any tool call can change the page under us, so the preview is remounted and
   // the numbers refetched whenever the chat reports work finished.
@@ -100,6 +146,7 @@ export function Rail({
         } catch {
           setSettings({});
         }
+        setSettingsFor(d.page.id);
       })
       .catch(() => undefined);
     return () => {
@@ -220,6 +267,11 @@ export function Rail({
         <div className="pad" style={{ color: "var(--silver-faint)", fontSize: 13 }}>
           No page selected yet. Build one in the chat and it appears here — live preview, live numbers, and the
           settings that decide where a form fill ends up.
+          <div style={{ marginTop: 12 }}>
+            <button type="button" className="btn sm primary" onClick={onStart}>
+              Start a page
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -256,6 +308,76 @@ export function Rail({
   const pinned = variants.some((v) => v.id === previewVariant) ? previewVariant : null;
   const previewSrc = `/p/${page.slug}?preview=1&hm=1${pinned ? `&v=${pinned}` : ""}`;
   const openHref = pinned ? previewSrc : `/p/${page.slug}?preview=1`;
+
+  /**
+   * The one next step worth suggesting for this page, if any.
+   *
+   * One card, never a checklist: the most valuable thing the page is missing,
+   * in the order a page earns them. Closed cards stay closed for the account.
+   * Features the plan does not include are not suggested here; the plan note
+   * already covers those.
+   */
+  const nudge = ((): {
+    key: NudgeKey;
+    title: string;
+    body: string;
+    action: string;
+    run: () => void;
+  } | null => {
+    if (readOnly || !account || loadingPanel || settingsFor !== page.id) return null;
+    const closed = (k: NudgeKey) => account.dismissed.includes(k);
+    const versions = stats ? stats.variants.filter((v) => v.active).length : page.variants;
+    if (versions <= 1 && !closed("variants")) {
+      return {
+        key: "variants",
+        title: "Test variations",
+        body: `${PRODUCT_NAME} splits traffic between versions and keeps the winner. This page has only the original.`,
+        action: "Make 3 variants",
+        run: () => onAsk(ASK_VARIANTS),
+      };
+    }
+    if (page.status !== "live" && canPublish && !closed("publish")) {
+      return {
+        key: "publish",
+        title: "Not live yet",
+        body: "Drafts are only visible to you. Publish to get a public link you can point ads at.",
+        action: "Publish",
+        run: publish,
+      };
+    }
+    if (page.status === "live" && canDomain && domains.length === 0 && !closed("domain")) {
+      return {
+        key: "domain",
+        title: "Put it on your own domain",
+        body: "It works on its /p/ link already. A hostname of your own reads better in an ad.",
+        action: "Add a domain",
+        run: () => setTab("setup"),
+      };
+    }
+    const wired = ["crmWebhookUrl", "notifyEmail", "calendarUrl"].some((k) => Boolean(settings[k]));
+    if (page.status === "live" && !wired && !closed("integrations")) {
+      return {
+        key: "integrations",
+        title: "Send leads somewhere",
+        body: "Every form fill is kept here. Add a CRM webhook or a notify email so they also reach you.",
+        action: "Set up",
+        run: () => setTab("setup"),
+      };
+    }
+    if (account.agentKeys === 0 && !keysOpened && !closed("agent-api")) {
+      return {
+        key: "agent-api",
+        title: "Build pages from your own agent",
+        body: "Another agent or a script can use the same tools as this chat over the API.",
+        action: "Get an API key",
+        run: () => {
+          setKeysOpened(true);
+          onOpenKeys();
+        },
+      };
+    }
+    return null;
+  })();
 
   const field = (key: string, label: string, placeholder: string) => (
     <div className="field-row" key={key}>
@@ -331,6 +453,26 @@ export function Rail({
               </>
             ) : null}
           </div>
+          {nudge ? (
+            <div className="nudge" role="note">
+              <div className="copy">
+                <b>{nudge.title}</b>
+                {nudge.body}
+              </div>
+              <button type="button" className="btn sm primary" onClick={nudge.run}>
+                {nudge.action}
+              </button>
+              <button
+                type="button"
+                className="btn sm ghost"
+                onClick={() => dismiss(nudge.key)}
+                title="Don't suggest this again"
+                aria-label="Don't suggest this again"
+              >
+                ×
+              </button>
+            </div>
+          ) : null}
           <div className={`frame-wrap ${device === "mobile" ? "mobile" : ""}`} style={{ flex: 1 }}>
             <iframe key={`${frameKey}:${pinned ?? "auto"}`} src={previewSrc} title="Preview" />
           </div>
@@ -435,8 +577,18 @@ export function Rail({
                 </div>
               </div>
             ))}
-            {(stats?.variants.length ?? 0) === 0 ? (
-              <div className="note">No variants yet. Ask the chat to generate some angles.</div>
+            {stats && stats.variants.filter((v) => v.active).length <= 1 ? (
+              <div className="note">
+                Only the original is running, so nothing is being tested yet. Add versions on different angles
+                and {PRODUCT_NAME} splits traffic between them and keeps the winner.
+                {readOnly ? null : (
+                  <div style={{ marginTop: 8 }}>
+                    <button type="button" className="btn sm primary" onClick={() => onAsk(ASK_VARIANTS)}>
+                      Make 3 variants
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : null}
           </div>
 
@@ -458,6 +610,12 @@ export function Rail({
                 </div>
               </div>
             ))}
+            {stats && stats.totals.views === 0 ? (
+              <div className="note">
+                How far people scroll and where they click, per section, fills in once the page has visitors.
+                {page.status === "live" ? " Share the link to start." : " Publish it, or simulate visitors below."}
+              </div>
+            ) : null}
           </div>
 
           {readOnly ? null : (

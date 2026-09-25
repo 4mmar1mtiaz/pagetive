@@ -26,7 +26,7 @@ export async function GET(req: Request) {
       auth: "Authorization: Bearer <your API key> (or x-api-key: <your API key>)",
       result:
         "200 with the tool's result object on success. A tool that refuses (bad id, plan limit, bad input) returns 422 with { error } - read it and adjust, as the chat agent would.",
-      flow: "read_brand on their website -> create_page with the full block array and brandUrl -> review previewUrl -> publish_page when told to.",
+      flow: "read_brand on their website -> create_page with the full block array and brandUrl -> review previewUrl -> generate_variants with 2-3 distinct angles (create_page makes only the original; with no variants nothing is A/B tested, and the bandit shifts traffic to whichever converts) -> set_match_rule on any variant written for a specific ad or campaign -> publish_page when told to -> set_integrations so leads reach a CRM webhook or email.",
     },
     plan: auth.ents.label,
     tools: TOOLS,

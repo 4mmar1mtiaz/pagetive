@@ -330,6 +330,28 @@ button { font: inherit; color: inherit; }
 .tool-chip.failed .spin { border: none; background: var(--bad); box-shadow: 0 0 8px var(--bad); }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* The agent's offered next steps, under its latest reply. */
+.next-steps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+
+/* A single suggested next step for the selected page. Same family as .note,
+   with room for an action and a way to say "not interested". */
+.nudge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--silver-dim);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--silver-dim);
+  background: rgba(255, 255, 255, 0.02);
+}
+.nudge .copy { flex: 1; min-width: 180px; }
+.nudge b { display: block; color: #fff; font-weight: 560; font-size: 12.5px; margin-bottom: 2px; }
+
 .composer { padding: 14px 22px 18px; border-top: 1px solid var(--line); }
 .composer-inner { max-width: 720px; margin: 0 auto; }
 .composer .field {

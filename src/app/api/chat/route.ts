@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { parseJson, toJson } from "@/lib/json";
 import { client, MODEL, priceOf, recordUsage } from "@/lib/llm";
 import { countMessage, resolveKey } from "@/lib/byok";
-import { systemPrompt } from "@/lib/prompt";
+import { SUGGESTIONS_NOTE, systemPrompt } from "@/lib/prompt";
 import { runTool, TOOLS } from "@/lib/tools";
 import { currentSession } from "@/lib/account";
 import { appUrl as resolvedAppUrl } from "@/lib/hosts";
@@ -61,6 +61,24 @@ function explain(err: unknown, ownKey: boolean): { message: string; needsKey: bo
     return { needsKey: false, message: "Anthropic's servers are busy right now. Nothing was lost; send your message again in a minute." };
   }
   return { needsKey: false, message: e.message || "Something went wrong writing that. Send it again." };
+}
+
+/**
+ * What the selected page already has, so a next-step offer is never for
+ * something that is done. As of the start of the turn: tool results this turn
+ * are newer, and the agent is told to trust those over this.
+ */
+function pageState(page: {
+  status: string;
+  settings: string;
+  variants: { impressions: number }[];
+  _count: { domains: number; leads: number };
+}): string {
+  const settings = parseJson<Record<string, unknown>>(page.settings, {});
+  const wired = (["crmWebhookUrl", "notifyEmail", "calendarUrl"] as const).filter((k) => Boolean(settings[k]));
+  const views = page.variants.reduce((n, v) => n + v.impressions, 0);
+  const versions = page.variants.length;
+  return ` State at the start of this turn (tool results this turn are newer): ${versions} active version${versions === 1 ? "" : "s"}${versions <= 1 ? " (the original only, so nothing is being tested)" : ""}; ${page.status === "live" ? "published" : "not published"}; ${page._count.domains} custom domain${page._count.domains === 1 ? "" : "s"}; integrations: ${wired.length ? wired.join(", ") : "none"}; ${views} views, ${page._count.leads} leads.`;
 }
 
 /** A page build is 2-4 tool calls; anything past this is a loop, not work. */
@@ -146,7 +164,15 @@ export async function POST(req: Request) {
   const selectedPage = chat.pageId
     ? await prisma.page.findFirst({
         where: { id: chat.pageId, ownerId: session.accountId },
-        select: { id: true, name: true, slug: true, status: true },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          status: true,
+          settings: true,
+          variants: { where: { active: true }, select: { impressions: true } },
+          _count: { select: { domains: true, leads: true } },
+        },
       })
     : null;
 
@@ -187,7 +213,7 @@ export async function POST(req: Request) {
         // it the agent calls list_pages and picks, which is how an edit meant
         // for one page lands on another.
         const pageNote = selectedPage
-          ? `\n\nThe user has "${selectedPage.name}" selected (pageId ${selectedPage.id}, slug ${selectedPage.slug}, ${selectedPage.status}). Every page tool this turn takes that pageId unless they name a different page outright. Do not call list_pages to work out which page they mean, and do not create a new page when they ask to change something — they are looking at this one.`
+          ? `\n\nThe user has "${selectedPage.name}" selected (pageId ${selectedPage.id}, slug ${selectedPage.slug}, ${selectedPage.status}). Every page tool this turn takes that pageId unless they name a different page outright. Do not call list_pages to work out which page they mean, and do not create a new page when they ask to change something — they are looking at this one.${pageState(selectedPage)}`
           : `\n\nNo page is selected. The user is starting something new, so build rather than edit: ask for their website and their offer in one message, call read_brand, then create_page. Do not go hunting through their existing pages.`;
 
         // Attached media, given as URLs the blocks can use directly. The
@@ -207,7 +233,7 @@ export async function POST(req: Request) {
           const run = anthropic.messages.stream({
             model: MODEL,
             max_tokens: 32000,
-            system: systemPrompt(appUrl) + planNote + pageNote + mediaNote,
+            system: systemPrompt(appUrl) + planNote + pageNote + mediaNote + SUGGESTIONS_NOTE,
             thinking: { type: "adaptive" },
             output_config: { effort: "high" },
             tools: TOOLS,

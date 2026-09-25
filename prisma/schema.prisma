@@ -281,6 +281,10 @@ model Account {
   /// except an admin, because resetting it is the whole giveaway.
   messagesUsed Int      @default(0)
   note         String? /// free text for whoever is running the business
+  /// Next-step cards this account closed, as a JSON array of their keys
+  /// ("variants", "publish", ...). Kept on the account, not in the browser, so
+  /// a card closed once stays closed on every device.
+  dismissed    String   @default("[]")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

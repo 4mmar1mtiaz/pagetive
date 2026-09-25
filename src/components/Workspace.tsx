@@ -376,7 +376,12 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
           ) : null}
           {!loadingLists && pages.length === 0 ? (
             <div style={{ padding: "4px 10px", fontSize: 12, color: "var(--silver-faint)" }}>
-              Nothing built yet.
+              Nothing built yet. Pages you build or import in the chat land here, with their views and leads.
+              <div style={{ marginTop: 8 }}>
+                <button type="button" className="btn sm ghost" onClick={newPage}>
+                  Build your first page
+                </button>
+              </div>
             </div>
           ) : null}
 
@@ -396,6 +401,11 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
               <div className="truncate">{c.title}</div>
             </button>
           ))}
+          {!loadingLists && chats.length === 0 ? (
+            <div style={{ padding: "4px 10px", fontSize: 12, color: "var(--silver-faint)" }}>
+              Every conversation is kept here, next to the page it built.
+            </div>
+          ) : null}
         </div>
       {/* Plan and account sit at the bottom of the rail, out of the way until
           they matter — which is the moment a limit is hit. */}
@@ -482,6 +492,15 @@ export function Workspace({ clerkOn }: { clerkOn: boolean }) {
           setRefreshKey((k) => k + 1);
         }}
         refreshKey={refreshKey}
+        onAsk={(text) => {
+          setMobileView("chat");
+          send(text);
+        }}
+        onStart={newPage}
+        onOpenKeys={() => {
+          setKeyPrompt(null);
+          setShowKeyPanel(true);
+        }}
       />
     </div>
   );

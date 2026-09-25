@@ -255,7 +255,10 @@ export default async function PageDetail({ params, searchParams }: Props) {
                     {report.sources.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="sm">
-                          No traffic in this range.
+                          No traffic in this range.{" "}
+                          {page.status === "live"
+                            ? "Visits show up here, by source, as people arrive."
+                            : "It is a draft, so nobody can visit it yet. Publish it from the workspace."}
                         </td>
                       </tr>
                     ) : null}
@@ -330,6 +333,19 @@ export default async function PageDetail({ params, searchParams }: Props) {
                     </div>
                   </div>
                 ))}
+                {report.variants.length <= 1 ? (
+                  <div className="note">
+                    Only the original is running, so there is nothing to compare yet. Ask the chat for variants on
+                    different angles and traffic shifts toward whichever converts.
+                    {access === "viewer" ? null : (
+                      <div style={{ marginTop: 8 }}>
+                        <Link className="btn sm ghost" href="/">
+                          Open the chat
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -400,7 +416,12 @@ export default async function PageDetail({ params, searchParams }: Props) {
                     </div>
                   </div>
                 ))}
-                {report.leads.length === 0 ? <div className="note">No leads in this range.</div> : null}
+                {report.leads.length === 0 ? (
+                  <div className="note">
+                    No leads in this range. Every form fill lands here, and also goes to the CRM webhook or notify
+                    email if one is set in the workspace&apos;s Setup tab.
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>

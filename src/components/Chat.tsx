@@ -23,6 +23,33 @@ const LABELS: Record<string, string> = {
   run_optimizer: "Running the optimizer",
 };
 
+/**
+ * Pulls the agent's clickable next steps out of its reply.
+ *
+ * The agent ends a reply with `[[next: A | B]]` when it offers something (see
+ * SUGGESTIONS_NOTE in src/lib/prompt.ts). The marker is cut from the text so it
+ * is never rendered, including the half-written tail of one mid-stream, which
+ * would otherwise flash on screen for a moment before it closes.
+ */
+function splitSuggestions(text: string): { body: string; next: string[] } {
+  let next: string[] = [];
+  let body = text.replace(/\[\[next:([^\]]*)\]\]/g, (_m, list: string) => {
+    next = list
+      .split("|")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 3);
+    return "";
+  });
+  const open = body.lastIndexOf("[[");
+  if (open >= 0) {
+    const tail = body.slice(open);
+    const partial = tail.length < 7 ? "[[next:".startsWith(tail) : tail.startsWith("[[next:");
+    if (partial && !tail.includes("]]")) body = body.slice(0, open);
+  }
+  return { body: body.trimEnd(), next };
+}
+
 const STARTERS = [
   {
     title: "Build a page from scratch",
@@ -131,25 +158,41 @@ export function Chat({
             </div>
           ) : null}
 
-          {turns.map((t, i) => (
-            <div key={i} className={`msg ${t.role === "user" ? "user" : "bot"} fade-in`}>
-              <div className="avatar">{t.role === "user" ? "you" : ""}</div>
-              <div className="body">
-                {t.tools.length > 0 ? (
-                  <div style={{ marginBottom: t.text ? 12 : 0 }}>
-                    {t.tools.map((tool, j) => (
-                      <span key={j} className={`tool-chip ${tool.state}`}>
-                        <i className="spin" />
-                        {LABELS[tool.name] ?? tool.name}
-                        {tool.summary ? <em style={{ opacity: 0.6, fontStyle: "normal" }}>· {tool.summary}</em> : null}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-                {t.text ? <div dangerouslySetInnerHTML={{ __html: renderMarkdown(t.text) }} /> : null}
+          {turns.map((t, i) => {
+            const { body, next } = t.role === "assistant" ? splitSuggestions(t.text) : { body: t.text, next: [] };
+            // Only the latest reply offers buttons. An old offer further up the
+            // thread is either taken or declined, and clicking it now would
+            // send a message about a moment that has passed.
+            const offer = !streaming && i === turns.length - 1 ? next : [];
+            return (
+              <div key={i} className={`msg ${t.role === "user" ? "user" : "bot"} fade-in`}>
+                <div className="avatar">{t.role === "user" ? "you" : ""}</div>
+                <div className="body">
+                  {t.tools.length > 0 ? (
+                    <div style={{ marginBottom: body ? 12 : 0 }}>
+                      {t.tools.map((tool, j) => (
+                        <span key={j} className={`tool-chip ${tool.state}`}>
+                          <i className="spin" />
+                          {LABELS[tool.name] ?? tool.name}
+                          {tool.summary ? <em style={{ opacity: 0.6, fontStyle: "normal" }}>· {tool.summary}</em> : null}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {body ? <div dangerouslySetInnerHTML={{ __html: renderMarkdown(body) }} /> : null}
+                  {offer.length ? (
+                    <div className="next-steps">
+                      {offer.map((label) => (
+                        <button key={label} type="button" className="btn sm ghost" onClick={() => onStarter(label)}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {streaming && turns[turns.length - 1]?.role === "user" ? (
             <div className="msg bot">
