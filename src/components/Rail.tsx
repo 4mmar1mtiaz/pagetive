@@ -17,7 +17,7 @@ import type { NudgeKey } from "@/lib/nudges";
  * it change.
  */
 
-type Tab = "preview" | "data" | "setup";
+type Tab = "preview" | "angles" | "data" | "setup";
 
 function pct(n: number): string {
   return `${(n * 100).toFixed(n >= 0.1 ? 0 : 1)}%`;
@@ -26,6 +26,11 @@ function pct(n: number): string {
 /** What the chat is asked when a next-step card's button is pressed. Worded as
  *  the user would say it, because it lands in their transcript as theirs. */
 const ASK_VARIANTS = "Make 3 variants of this page on different angles so it A/B tests itself.";
+
+/** One-click angles. Each becomes a variant the optimizer tests against the rest. */
+const QUICK_ANGLES = ["Price", "Speed", "Guarantee", "Social proof", "Urgency", "Pain point"];
+const askAngle = (angle: string) =>
+  `Add a variant of this page on the "${angle}" angle: rewrite the headline, subhead and CTA around it so it A/B tests against the others.`;
 
 export function Rail({
   page,
@@ -58,6 +63,8 @@ export function Rail({
   /** Frame width only — the page itself is the same, so no remount is needed. */
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const [simming, setSimming] = useState(false);
+  const [frameLoading, setFrameLoading] = useState(true);
+  const [customAngle, setCustomAngle] = useState("");
   const [domains, setDomains] = useState<
     { id: string; hostname: string; verified: boolean; note: string | null; plan: { records: { type: string; name: string; value: string }[]; explain: string; ready: boolean } }[]
   >([]);
@@ -111,6 +118,11 @@ export function Rail({
     setFrameKey((k) => k + 1);
   }, [refreshKey, pageId]);
 
+  // Every remount of the preview is a fresh page render. Show that it is coming.
+  useEffect(() => {
+    setFrameLoading(true);
+  }, [frameKey, previewVariant, pageId]);
+
   // A variant id belongs to one page. Carrying it to the next one would pin the
   // preview to something that does not exist there.
   useEffect(() => {
@@ -121,23 +133,23 @@ export function Rail({
     if (!pageId) return;
     let cancelled = false;
     setLoadingPanel(true);
+    // Each of these used to be requested twice: once to know when loading was
+    // over and once for the data. One request each, and the spinner follows it.
     Promise.allSettled([
-      fetch(`/api/pages/${pageId}/analytics`),
-      fetch(`/api/pages/${pageId}/domains`),
+      fetch(`/api/pages/${pageId}/analytics`)
+        .then((r) => r.json())
+        .then((d) => !cancelled && setStats(d.error ? null : d)),
+      fetch(`/api/pages/${pageId}/domains`)
+        .then((r) => r.json())
+        .then((d) => !cancelled && setDomains(d.domains ?? [])),
     ]).finally(() => !cancelled && setLoadingPanel(false));
-    fetch(`/api/pages/${pageId}/analytics`)
-      .then((r) => r.json())
-      .then((d) => !cancelled && setStats(d.error ? null : d))
-      .catch(() => undefined);
-    fetch(`/api/pages/${pageId}/domains`)
-      .then((r) => r.json())
-      .then((d) => !cancelled && setDomains(d.domains ?? []))
-      .catch(() => undefined);
     fetch(`/api/usage?page=${pageId}`)
       .then((r) => r.json())
       .then((d) => !cancelled && setSpend(d.page ?? null))
       .catch(() => undefined);
-    fetch(`/api/pages/${pageId}`)
+    // Settings only. The full record carries every stored version and the last
+    // fifty leads, which this panel never shows.
+    fetch(`/api/pages/${pageId}?fields=settings`)
       .then((r) => r.json())
       .then((d) => {
         if (cancelled || !d.page) return;
@@ -401,9 +413,14 @@ export function Rail({
           </div>
         </div>
         <div className="tabs">
-          {(["preview", "data", "setup"] as Tab[]).map((t) => (
-            <button key={t} className={`tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>
+          {(["preview", "angles", "data", "setup"] as Tab[]).map((t) => (
+            <button
+              key={t}
+              className={`tab ${tab === t ? "active" : ""} ${t === "angles" ? "tab-angles" : ""}`}
+              onClick={() => setTab(t)}
+            >
               {t}
+              {t === "angles" && variants.length > 1 ? <span className="tab-count">{variants.length}</span> : null}
             </button>
           ))}
         </div>
@@ -430,7 +447,7 @@ export function Rail({
             </div>
             {variants.length > 1 ? (
               <>
-                <span className="sm" style={{ marginLeft: 6 }}>Showing:</span>
+                <span className="sm" style={{ marginLeft: 6 }}>Angle:</span>
                 <div className="tabs">
                   <button
                     className={`tab ${pinned ? "" : "active"}`}
@@ -452,6 +469,9 @@ export function Rail({
                 </div>
               </>
             ) : null}
+            <button type="button" className="btn sm angle-cta" style={{ marginLeft: "auto" }} onClick={() => setTab("angles")}>
+              {variants.length > 1 ? `${variants.length} angles testing` : "+ Test angles"}
+            </button>
           </div>
           {nudge ? (
             <div className="nudge" role="note">
@@ -474,7 +494,17 @@ export function Rail({
             </div>
           ) : null}
           <div className={`frame-wrap ${device === "mobile" ? "mobile" : ""}`} style={{ flex: 1 }}>
-            <iframe key={`${frameKey}:${pinned ?? "auto"}`} src={previewSrc} title="Preview" />
+            {frameLoading ? (
+              <div className="frame-loading">
+                <Spinner block label="Loading preview" />
+              </div>
+            ) : null}
+            <iframe
+              key={`${frameKey}:${pinned ?? "auto"}`}
+              src={previewSrc}
+              title="Preview"
+              onLoad={() => setFrameLoading(false)}
+            />
           </div>
           <div
             className="rail-actions"
@@ -527,6 +557,100 @@ export function Rail({
             </div>
           ) : null}
         </>
+      ) : null}
+
+      {tab === "angles" ? (
+        <div className="rail-body pad">
+          <div className="angles-hero">
+            <b>Angles</b>
+            <span>
+              Each angle is a version of this page pitched a different way. {PRODUCT_NAME} splits traffic between
+              them and shifts it to whichever converts best.
+            </span>
+          </div>
+
+          {loadingPanel && !stats ? <Spinner block label="Loading angles" /> : null}
+
+          <div className="rows">
+            {(stats?.variants ?? []).map((v) => (
+              <div className={`row-card angle-card ${v.active ? "" : "retired"}`} key={v.id}>
+                <div className="top">
+                  <span className="nm">{v.name}</span>
+                  <span
+                    className={`tag ${v.flag === "winning" ? "good" : v.flag === "losing" ? "bad" : v.flag === "starved" ? "warn" : ""}`}
+                  >
+                    {v.active ? v.flag : "retired"}
+                  </span>
+                </div>
+                <div className="angle-line">{v.angle || (v.name === "Control" ? "The original page" : "No angle noted")}</div>
+                <div className="sm">
+                  {v.impressions} views · {v.conversions} conversions · {pct(v.cvr)} CVR ·{" "}
+                  {Math.round(v.winProbability * 100)}% chance to win
+                </div>
+                <div className="bar">
+                  <i style={{ width: `${Math.max(2, v.winProbability * 100)}%` }} />
+                </div>
+                {v.active ? (
+                  <div style={{ marginTop: 8 }}>
+                    <button
+                      type="button"
+                      className="btn sm ghost"
+                      onClick={() => {
+                        setPreviewVariant(v.id);
+                        setTab("preview");
+                      }}
+                    >
+                      Preview this angle
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+
+          {readOnly ? null : (
+            <>
+              <div className="side-label" style={{ padding: "18px 0 8px" }}>
+                Add angles
+              </div>
+              <button type="button" className="btn primary" style={{ width: "100%" }} onClick={() => onAsk(ASK_VARIANTS)}>
+                Generate 3 angles for me
+              </button>
+              <div className="angle-chips">
+                {QUICK_ANGLES.map((a) => (
+                  <button key={a} type="button" className="btn sm ghost" onClick={() => onAsk(askAngle(a))}>
+                    + {a}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <input
+                  className="angle-input"
+                  value={customAngle}
+                  placeholder="Your own angle, e.g. “built for busy parents”"
+                  onChange={(e) => setCustomAngle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && customAngle.trim()) {
+                      onAsk(askAngle(customAngle.trim()));
+                      setCustomAngle("");
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn sm"
+                  disabled={!customAngle.trim()}
+                  onClick={() => {
+                    onAsk(askAngle(customAngle.trim()));
+                    setCustomAngle("");
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       ) : null}
 
       {tab === "data" ? (

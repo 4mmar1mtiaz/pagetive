@@ -32,9 +32,10 @@ html, body { height: 100%; }
 body {
   margin: 0;
   background:
-    radial-gradient(1100px 700px at 12% -8%, rgba(160, 180, 205, 0.13), transparent 62%),
-    radial-gradient(900px 600px at 100% 0%, rgba(120, 140, 170, 0.08), transparent 55%),
-    linear-gradient(180deg, var(--ink-2), var(--ink) 60%);
+    radial-gradient(1200px 800px at 8% -10%, rgba(92, 110, 255, 0.20), transparent 60%),
+    radial-gradient(1000px 700px at 105% 5%, rgba(170, 90, 255, 0.14), transparent 58%),
+    radial-gradient(900px 700px at 60% 115%, rgba(40, 170, 200, 0.10), transparent 60%),
+    linear-gradient(160deg, #0b0d18, var(--ink) 55%, #07060d);
   background-attachment: fixed;
   color: var(--silver);
   font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -289,8 +290,9 @@ button { font: inherit; color: inherit; }
 }
 .msg.user .avatar { background: rgba(255, 255, 255, 0.06); }
 .msg.bot .avatar {
-  background: conic-gradient(from 210deg, #ffffff, #9aa6b6, #e8eef6, #78838f, #ffffff);
-  box-shadow: 0 0 16px -4px var(--glow);
+  background: linear-gradient(180deg, rgba(150, 170, 255, 0.22), rgba(150, 170, 255, 0.08));
+  border-color: rgba(160, 180, 255, 0.35);
+  color: #e6ebff; font-weight: 600; letter-spacing: 0.02em;
 }
 .msg .body { flex: 1; min-width: 0; font-size: 14px; }
 .msg .body p { margin: 0 0 0.85em; }
@@ -733,3 +735,65 @@ button { font: inherit; color: inherit; }
    rather than fading it out with the rest of the disabled states. */
 .btn:disabled:has(.spin) { opacity: 0.85; cursor: progress; }
 .tab:disabled { opacity: 0.5; cursor: progress; }
+
+/* ---------- loading states ---------- */
+
+.app-loading {
+  height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+}
+.app-loading .mark { width: 40px; height: 40px; background: url("/brand/mark.png") center / contain no-repeat; }
+
+/* The preview frame is a full page render; until it paints, say so instead of
+   showing an empty dark box. */
+.frame-loading {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(8, 10, 16, 0.72); backdrop-filter: blur(2px); z-index: 1; pointer-events: none;
+}
+
+/* ---------- reply notices ---------- */
+
+.toasts {
+  position: fixed; right: 18px; bottom: 18px; z-index: 50;
+  display: flex; flex-direction: column; gap: 8px; max-width: min(340px, calc(100vw - 32px));
+}
+.toast {
+  display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 14px;
+  border: 1px solid rgba(160, 180, 255, 0.3); border-radius: 14px;
+  background: linear-gradient(180deg, #161a2b, #0e1019);
+  box-shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.7);
+}
+.toast-open {
+  flex: 1; min-width: 0; text-align: left; background: none; border: 0; color: var(--silver);
+  font: inherit; cursor: pointer; display: flex; flex-direction: column; gap: 2px;
+}
+.toast-open b { color: #fff; font-size: 13px; }
+.toast-open span { font-size: 12px; color: var(--silver-dim); }
+.item .row .spin { width: 10px; height: 10px; border-width: 1.5px; margin-left: auto; }
+
+/* ---------- angles ---------- */
+
+.tab-angles { color: #dfe5ff; }
+.tab-count {
+  margin-left: 5px; padding: 0 6px; border-radius: 99px; font-size: 10.5px;
+  background: rgba(150, 170, 255, 0.25); color: #fff;
+}
+.angle-cta {
+  border-color: rgba(160, 180, 255, 0.4);
+  background: linear-gradient(180deg, rgba(120, 140, 255, 0.28), rgba(120, 140, 255, 0.1));
+  color: #fff;
+}
+.angle-cta:hover { background: linear-gradient(180deg, rgba(120, 140, 255, 0.4), rgba(120, 140, 255, 0.16)); }
+.angles-hero {
+  display: flex; flex-direction: column; gap: 4px; padding: 14px; margin-bottom: 14px;
+  border: 1px solid rgba(160, 180, 255, 0.28); border-radius: 14px;
+  background: linear-gradient(135deg, rgba(110, 130, 255, 0.16), rgba(170, 90, 255, 0.08));
+  font-size: 12.5px; color: var(--silver-dim);
+}
+.angles-hero b { color: #fff; font-size: 15px; }
+.angle-card .angle-line { color: #e6ebff; font-size: 13px; margin: 4px 0 2px; }
+.angle-card.retired { opacity: 0.5; }
+.angle-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.angle-input {
+  flex: 1; min-width: 0; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03); color: #fff; font: inherit; font-size: 13px; outline: none;
+}

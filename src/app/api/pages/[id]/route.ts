@@ -11,9 +11,18 @@ export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function GET(_req: Request, { params }: Ctx) {
+export async function GET(req: Request, { params }: Ctx) {
   const { id } = await params;
   const session = await currentSession();
+  // The workspace rail only needs the settings; the full record below pulls
+  // twenty stored versions and fifty leads with it.
+  if (new URL(req.url).searchParams.get("fields") === "settings") {
+    const row = await prisma.page.findUnique({ where: { id }, select: { id: true, ownerId: true, settings: true } });
+    if (!row || row.ownerId !== session.accountId) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    return NextResponse.json({ page: { id: row.id, settings: row.settings } });
+  }
   const page = await prisma.page.findUnique({
     where: { id },
     include: {

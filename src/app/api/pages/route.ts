@@ -18,7 +18,12 @@ export async function GET() {
       ? { OR: [{ ownerId: session.accountId }, { id: { in: granted } }] }
       : { id: { in: [] } },
     orderBy: { updatedAt: "desc" },
-    include: { variants: true, _count: { select: { leads: true } } },
+    // Only the counters. A variant row also carries its block overrides, which
+    // the sidebar never reads and which made this list slow to load.
+    include: {
+      variants: { select: { impressions: true, conversions: true } },
+      _count: { select: { leads: true } },
+    },
   });
   return NextResponse.json({
     plan: {

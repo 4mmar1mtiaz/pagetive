@@ -166,7 +166,7 @@ export function Chat({
             const offer = !streaming && i === turns.length - 1 ? next : [];
             return (
               <div key={i} className={`msg ${t.role === "user" ? "user" : "bot"} fade-in`}>
-                <div className="avatar">{t.role === "user" ? "you" : ""}</div>
+                <div className="avatar">{t.role === "user" ? "you" : "AI"}</div>
                 <div className="body">
                   {t.tools.length > 0 ? (
                     <div style={{ marginBottom: body ? 12 : 0 }}>
@@ -196,9 +196,9 @@ export function Chat({
 
           {streaming && turns[turns.length - 1]?.role === "user" ? (
             <div className="msg bot">
-              <div className="avatar" />
-              <div className="body" style={{ paddingTop: 10, width: 120 }}>
-                <div className="spinner-line" />
+              <div className="avatar">AI</div>
+              <div className="body" style={{ paddingTop: 2 }}>
+                <Spinner label="Thinking" />
               </div>
             </div>
           ) : null}
