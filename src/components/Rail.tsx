@@ -65,6 +65,7 @@ export function Rail({
   const [simming, setSimming] = useState(false);
   const [frameLoading, setFrameLoading] = useState(true);
   const [customAngle, setCustomAngle] = useState("");
+  const [copiedAngle, setCopiedAngle] = useState<string | null>(null);
   const [domains, setDomains] = useState<
     { id: string; hostname: string; verified: boolean; note: string | null; plan: { records: { type: string; name: string; value: string }[]; explain: string; ready: boolean } }[]
   >([]);
@@ -591,7 +592,7 @@ export function Rail({
                   <i style={{ width: `${Math.max(2, v.winProbability * 100)}%` }} />
                 </div>
                 {v.active ? (
-                  <div style={{ marginTop: 8 }}>
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                     <button
                       type="button"
                       className="btn sm ghost"
@@ -602,6 +603,27 @@ export function Rail({
                     >
                       Preview this angle
                     </button>
+                    {/* The public link for this one angle. `?v=` forces it the same way a
+                        campaign link does (src/lib/serve.ts), and without `preview`/`hm`
+                        the visits still count toward the angle's numbers. */}
+                    {page.status === "live" ? (
+                      <button
+                        type="button"
+                        className="btn sm ghost"
+                        title={`${window.location.origin}/p/${page.slug}?v=${v.id}`}
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(`${window.location.origin}/p/${page.slug}?v=${v.id}`);
+                            setCopiedAngle(v.id);
+                            setTimeout(() => setCopiedAngle((c) => (c === v.id ? null : c)), 1600);
+                          } catch {
+                            window.prompt("Copy this angle's link", `${window.location.origin}/p/${page.slug}?v=${v.id}`);
+                          }
+                        }}
+                      >
+                        {copiedAngle === v.id ? "Copied" : "Copy link"}
+                      </button>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
